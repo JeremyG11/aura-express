@@ -1,3 +1,5 @@
+import { prisma } from "../libs/db";
+
 export const updateUserStatus = async (userId: string, status: boolean) => {
   try {
     await prisma.user.update({

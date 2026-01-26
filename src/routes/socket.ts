@@ -1,5 +1,6 @@
-import express, { Request, Response } from "express";
-const router = express.Router();
+import { Request, Response, Router } from "express";
+
+const router: Router = Router();
 
 import { io } from "../libs/socket";
 import {
@@ -50,7 +51,7 @@ router.delete(
     deleteMessage(io, req, res);
   },
 );
- 
+
 router.get("/conversation", getConversation);
 
 router.get("/", (req: Request, res: Response) => {

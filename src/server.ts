@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import http from "http";
 import cors from "cors";
 import dotenv from "dotenv";
-import express, { NextFunction } from "express";
+import express, { Application, NextFunction } from "express";
 import { Server } from "socket.io";
 import cookieParser from "cookie-parser";
 import { rateLimit } from "express-rate-limit";
@@ -22,14 +22,13 @@ import { auth } from "./libs/auth";
 
 dotenv.config();
 const port = process.env.PORT || 7272;
-export const app = express();
+export const app: Application = express();
 
 // CORS configuration - support multiple origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
   : ["http://localhost:3000"];
 
-// middlewares
 app.use(express.json());
 app.use(cookieParser());
 app.use(
