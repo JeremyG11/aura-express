@@ -1,39 +1,37 @@
 import { prisma } from "./db";
 
 export const findOrCreateConversation = async (
-  userProfileOneId: string,
-  userProfileTwoId: string
+  memberOneId: string,
+  memberTwoId: string,
 ) => {
   let conversation =
-    (await findConversation(userProfileOneId, userProfileTwoId)) ||
-    (await findConversation(userProfileTwoId, userProfileOneId));
+    (await findConversation(memberOneId, memberTwoId)) ||
+    (await findConversation(memberTwoId, memberOneId));
 
   if (!conversation) {
-    conversation = await createNewConversation(
-      userProfileOneId,
-      userProfileTwoId
-    );
+    conversation = await createNewConversation(memberOneId, memberTwoId);
   }
 
   return conversation;
 };
 
-const findConversation = async (
-  userProfileOneId: string,
-  userProfileTwoId: string
-) => {
+const findConversation = async (memberOneId: string, memberTwoId: string) => {
   try {
     return await prisma.conversation.findFirst({
       where: {
-        AND: [
-          { userProfileOneId: userProfileOneId },
-          { userProfileTwoId: userProfileTwoId },
-        ],
+        AND: [{ memberOneId: memberOneId }, { memberTwoId: memberTwoId }],
       },
       include: {
-        userProfileOne: true,
-        userProfileTwo: true,
-        messages: true,
+        memberOne: {
+          include: {
+            profile: true,
+          },
+        },
+        memberTwo: {
+          include: {
+            profile: true,
+          },
+        },
       },
     });
   } catch (error) {
@@ -43,19 +41,26 @@ const findConversation = async (
 };
 
 const createNewConversation = async (
-  userProfileOneId: string,
-  userProfileTwoId: string
+  memberOneId: string,
+  memberTwoId: string,
 ) => {
   try {
     return await prisma.conversation.create({
       data: {
-        userProfileOneId,
-        userProfileTwoId,
+        memberOneId,
+        memberTwoId,
       },
       include: {
-        userProfileOne: true,
-        userProfileTwo: true,
-        messages: true,
+        memberOne: {
+          include: {
+            profile: true,
+          },
+        },
+        memberTwo: {
+          include: {
+            profile: true,
+          },
+        },
       },
     });
   } catch {

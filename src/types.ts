@@ -3,7 +3,7 @@ import { Notification, User } from "@prisma/client";
 
 export interface CustomSocket extends Socket {
   user?: Pick<User, "id" | "email" | "name" | "imageUrl"> & {
-    username: string;
+    username?: string;
   };
 }
 export type GoogleReturnedToken = {
@@ -26,9 +26,7 @@ export interface GoogleAccountUser {
 }
 
 export interface NotificationWithUpdates extends Notification {
-  updates: {
-    isSeen: boolean;
-  };
+  updates: Partial<Notification>;
 }
 
 export interface NotificationCreateInput {

@@ -1,4 +1,3 @@
-import { Notification } from "@prisma/client";
 import { prisma } from "../libs/db";
 import { NotificationWithUpdates } from "types";
 
