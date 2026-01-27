@@ -29,23 +29,78 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/server.ts
 var server_exports = {};
 __export(server_exports, {
-  app: () => app,
-  io: () => io2
+  app: () => app
 });
 module.exports = __toCommonJS(server_exports);
-var import_http = __toESM(require("http"));
-var import_cors = __toESM(require("cors"));
 var import_dotenv = __toESM(require("dotenv"));
-var import_express2 = __toESM(require("express"));
-var import_socket3 = require("socket.io");
+var import_http = __toESM(require("http"));
+
+// src/config/app.ts
+var import_express = __toESM(require("express"));
+var import_cors = __toESM(require("cors"));
 var import_cookie_parser = __toESM(require("cookie-parser"));
 var import_express_rate_limit = require("express-rate-limit");
 
-// src/routes/socket.ts
-var import_express = require("express");
+// src/libs/logger.ts
+var import_winston = __toESM(require("winston"));
+var logger = import_winston.default.createLogger({
+  level: "info",
+  format: import_winston.default.format.json(),
+  defaultMeta: { service: "user-service" },
+  transports: []
+});
+if (process.env.NODE_ENV !== "production") {
+  logger.add(
+    new import_winston.default.transports.Console({
+      format: import_winston.default.format.simple()
+    })
+  );
+} else {
+  logger.add(
+    new import_winston.default.transports.Console({
+      format: import_winston.default.format.json()
+    })
+  );
+}
+var logger_default = logger;
 
-// src/libs/socket.ts
-var import_socket = require("socket.io");
+// src/config/app.ts
+var allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["http://localhost:3000"];
+function createApp() {
+  const app2 = (0, import_express.default)();
+  app2.use(import_express.default.json());
+  app2.use((0, import_cookie_parser.default)());
+  app2.use(
+    (0, import_cors.default)({
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      credentials: true
+    })
+  );
+  app2.use((req, res, next) => {
+    logger_default.info(`[Request] ${req.method} ${req.url}`);
+    next();
+  });
+  const limiter = (0, import_express_rate_limit.rateLimit)({
+    windowMs: 15 * 60 * 1e3,
+    // 15 minutes
+    max: 100,
+    // Limit each IP to 100 requests per `window`
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+  app2.use(limiter);
+  return app2;
+}
+
+// src/config/routes.ts
+var import_node3 = require("better-auth/node");
 
 // src/libs/auth.ts
 var import_better_auth = require("better-auth");
@@ -280,6 +335,58 @@ var auth = (0, import_better_auth.betterAuth)({
   ]
 });
 
+// src/middlewares/authMiddleware.ts
+var import_node = require("better-auth/node");
+var authMiddleware = async (req, res, next) => {
+  const session = await auth.api.getSession({
+    headers: (0, import_node.fromNodeHeaders)(req.headers)
+  });
+  console.log("[Auth] Session result:", session ? "FOUND" : "NULL");
+  if (session) {
+    res.locals.userId = session.user.id;
+    res.locals.user = session.user;
+    return next();
+  }
+  const internalSecret = req.headers["x-internal-secret"];
+  const bridgedUserId = req.headers["x-user-id"];
+  console.log("[Auth] Bridged Auth Attempt:", {
+    hasSecret: !!internalSecret,
+    hasUserId: !!bridgedUserId,
+    secretMatch: internalSecret === process.env.SERVER_INTERNAL_SECRET
+  });
+  if (internalSecret && internalSecret === process.env.SERVER_INTERNAL_SECRET && bridgedUserId) {
+    res.locals.userId = bridgedUserId;
+    return next();
+  }
+  if (process.env.NODE_ENV !== "production" && bridgedUserId) {
+    console.warn(
+      "[Auth] WARNING: Using insecure fallback userId:",
+      bridgedUserId
+    );
+    res.locals.userId = bridgedUserId;
+    return next();
+  }
+  console.error("[Auth] Authentication FAILED for:", req.url);
+  return res.status(401).json({ error: "Unauthorized - No valid session or secure bridge found" });
+};
+
+// src/middlewares/errorHandler.ts
+var errorHandler = (err, req, res, next) => {
+  const status = err.status || 500;
+  const message = err.message || "Something went wrong";
+  console.error(`[Error] ${req.method} ${req.url} - Status: ${status}`, err);
+  res.status(status).json({
+    error: message,
+    stack: process.env.NODE_ENV === "production" ? void 0 : err.stack
+  });
+};
+
+// src/routes/socket.ts
+var import_express2 = require("express");
+
+// src/libs/socket.ts
+var import_socket = require("socket.io");
+
 // src/libs/conversation.ts
 var findOrCreateConversation = async (memberOneId, memberTwoId) => {
   let conversation = await findConversation(memberOneId, memberTwoId) || await findConversation(memberTwoId, memberOneId);
@@ -337,35 +444,123 @@ var createNewConversation = async (memberOneId, memberTwoId) => {
   }
 };
 
-// src/libs/logger.ts
-var import_winston = __toESM(require("winston"));
-var logger = import_winston.default.createLogger({
-  level: "info",
-  format: import_winston.default.format.json(),
-  defaultMeta: { service: "user-service" },
-  transports: []
-});
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new import_winston.default.transports.Console({
-      format: import_winston.default.format.simple()
-    })
-  );
-} else {
-  logger.add(
-    new import_winston.default.transports.Console({
-      format: import_winston.default.format.json()
-    })
-  );
-}
-var logger_default = logger;
-
 // src/libs/socket.ts
-var import_node = require("better-auth/node");
+var import_node2 = require("better-auth/node");
 var io;
+var initializeSocket = (httpServer2, allowedOrigins2) => {
+  io = new import_socket.Server(httpServer2, {
+    cors: {
+      origin: allowedOrigins2,
+      credentials: true,
+      methods: ["GET", "POST"]
+    },
+    transports: ["websocket", "polling"],
+    allowEIO3: true
+  });
+  io.use(async (socket, next) => {
+    logger_default.info("[Socket.io] New connection attempt");
+    const session = await auth.api.getSession({
+      headers: (0, import_node2.fromNodeHeaders)(socket.handshake.headers)
+    });
+    if (!session) {
+      logger_default.warn("[Socket.io] Unauthenticated connection attempt rejected");
+      return next(new Error("Authentication failed"));
+    }
+    socket.user = {
+      id: session.user.id,
+      name: session.user.name,
+      imageUrl: session.user.image || "",
+      email: session.user.email
+    };
+    logger_default.info(`[Socket.io] User authenticated: ${socket.user.id}`);
+    next();
+  });
+  io.on("connection", (socket) => {
+    logger_default.info(`[Socket.io] Client connected: ${socket.id}`);
+    socket.join(socket.user?.id);
+    socket.onAny((event, ...args) => {
+      logger_default.info(event, args);
+    });
+    const activeUsers = [];
+    for (let [id, socket2] of io.of("/").sockets) {
+      activeUsers.push({
+        socketId: id,
+        ...socket2.handshake.auth
+      });
+    }
+    socket.emit("active-users", activeUsers);
+    socket.broadcast.emit("user connected", {
+      socketId: socket.id,
+      userData: { ...socket.handshake.auth }
+    });
+    socket.emit("session", {
+      user: socket.user
+    });
+    socket.on("private message", async ({ content, to }) => {
+      io.to(to).to(socket.user.id).emit("private message", {
+        ...content,
+        from: socket.user,
+        to
+      });
+      logger_default.info(socket.user.id);
+      try {
+        const conversation = await findOrCreateConversation(socket.user.id, to);
+        if (!conversation) return;
+        const member = conversation.memberOne.profileId === socket.user.id ? conversation.memberOne : conversation.memberTwo;
+        await prisma.directMessage.create({
+          data: {
+            content: content.content || content,
+            // Handle both object and string
+            conversationId: conversation.id,
+            memberId: member.id
+          }
+        });
+      } catch (err) {
+        logger_default.error(err);
+      }
+    });
+    socket.on("markAsRead", async ({ senderId }) => {
+      try {
+        const receiverId = socket.user.id;
+        await prisma.directMessage.updateMany({
+          where: {
+            member: {
+              profileId: senderId
+            },
+            conversation: {
+              OR: [
+                { memberOneId: receiverId, memberTwoId: senderId },
+                { memberOneId: senderId, memberTwoId: receiverId }
+              ]
+            },
+            seen: false
+          },
+          data: {
+            seen: true
+          }
+        });
+        io.to(senderId).emit("markAsRead", { senderId, receiverId });
+      } catch (error) {
+        logger_default.error("\u274C Error marking messages as read:", error);
+      }
+    });
+    socket.on("typing", (to) => {
+      socket.broadcast.to(to).emit("broadcast typing", {});
+    });
+    const notifications = [];
+    socket.on("notification", (arg) => {
+      socket.broadcast.to(arg.to).emit("notification", arg.notification);
+    });
+    socket.on("notification-acknowledgment", (notificationId) => {
+    });
+    socket.on("disconnect", async () => {
+      const matchingSockets = await io.in(socket.user.id).fetchSockets();
+    });
+  });
+};
 
 // src/controllers/message.ts
-var createChannelMessage = async (io3, req, res) => {
+var createChannelMessage = async (io2, req, res) => {
   try {
     const { content, fileUrl, isEncrypted } = req.body;
     const { serverId, channelId } = req.query;
@@ -413,14 +608,14 @@ var createChannelMessage = async (io3, req, res) => {
       }
     });
     const channelKey = `chat:${channelId}:messages`;
-    io3.emit(channelKey, message);
+    io2.emit(channelKey, message);
     return res.status(201).json(message);
   } catch (error) {
     console.error("[CREATE_CHANNEL_MESSAGE]", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-var createDirectMessage = async (io3, req, res) => {
+var createDirectMessage = async (io2, req, res) => {
   try {
     const { content, fileUrl, isEncrypted } = req.body;
     const { conversationId } = req.query;
@@ -472,14 +667,14 @@ var createDirectMessage = async (io3, req, res) => {
       }
     });
     const channelKey = `chat:${conversationId}:messages`;
-    io3.emit(channelKey, message);
+    io2.emit(channelKey, message);
     return res.status(201).json(message);
   } catch (error) {
     console.error("[CREATE_DIRECT_MESSAGE]", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-var updateMessage = async (io3, req, res) => {
+var updateMessage = async (io2, req, res) => {
   try {
     const { messageId } = req.params;
     const { content } = req.body;
@@ -518,7 +713,7 @@ var updateMessage = async (io3, req, res) => {
         }
       });
       const updateKey = `chat:${message.channelId}:messages:update`;
-      io3.emit(updateKey, updatedMessage);
+      io2.emit(updateKey, updatedMessage);
       return res.status(200).json(updatedMessage);
     } else if (conversationId) {
       const member = await prisma.member.findFirst({
@@ -559,7 +754,7 @@ var updateMessage = async (io3, req, res) => {
         }
       });
       const updateKey = `chat:${conversationId}:messages:update`;
-      io3.emit(updateKey, updatedMessage);
+      io2.emit(updateKey, updatedMessage);
       return res.status(200).json(updatedMessage);
     }
     return res.status(400).json({ error: "Context missing (serverId or conversationId)" });
@@ -568,7 +763,7 @@ var updateMessage = async (io3, req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-var deleteMessage = async (io3, req, res) => {
+var deleteMessage = async (io2, req, res) => {
   try {
     const { messageId } = req.params;
     const { serverId, conversationId } = req.query;
@@ -614,7 +809,7 @@ var deleteMessage = async (io3, req, res) => {
         }
       });
       const updateKey = `chat:${message.channelId}:messages:update`;
-      io3.emit(updateKey, deletedMessage);
+      io2.emit(updateKey, deletedMessage);
       return res.status(200).json(deletedMessage);
     } else if (conversationId) {
       const member = await prisma.member.findFirst({
@@ -661,7 +856,7 @@ var deleteMessage = async (io3, req, res) => {
         }
       });
       const updateKey = `chat:${conversationId}:messages:update`;
-      io3.emit(updateKey, deletedMessage);
+      io2.emit(updateKey, deletedMessage);
       return res.status(200).json(deletedMessage);
     }
     return res.status(400).json({ error: "Context missing (serverId or conversationId)" });
@@ -683,7 +878,7 @@ var getConversation = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-var getMessages = async (io3, req, res) => {
+var getMessages = async (io2, req, res) => {
   const { receiverId } = req.query;
   try {
     const conversation = await findOrCreateConversation(
@@ -792,7 +987,7 @@ var sendMessageSchema = import_zod.z.object({
 });
 
 // src/routes/socket.ts
-var router = (0, import_express.Router)();
+var router = (0, import_express2.Router)();
 router.post(
   "/channel",
   validationMiddleware_default(createChannelMessageSchema),
@@ -827,229 +1022,144 @@ router.get("/", (req, res) => {
 });
 var socket_default = router;
 
-// src/middlewares/errorHandler.ts
-var errorHandler = (err, req, res, next) => {
-  const status = err.status || 500;
-  const message = err.message || "Something went wrong";
-  console.error(`[Error] ${req.method} ${req.url} - Status: ${status}`, err);
-  res.status(status).json({
-    error: message,
-    stack: process.env.NODE_ENV === "production" ? void 0 : err.stack
-  });
+// src/routes/conversations.ts
+var import_express3 = require("express");
+
+// src/controllers/conversation.ts
+var getConversations = async (req, res) => {
+  try {
+    const { serverId } = req.query;
+    const userId = res.locals.userId;
+    if (!serverId) {
+      return res.status(400).json({ error: "Server ID missing" });
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: {
+          userId
+        }
+      }
+    });
+    if (!currentMember) {
+      return res.status(404).json({ error: "Member not found" });
+    }
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        OR: [
+          { memberOneId: currentMember.id },
+          { memberTwoId: currentMember.id }
+        ]
+      },
+      include: {
+        memberOne: {
+          include: {
+            profile: true
+          }
+        },
+        memberTwo: {
+          include: {
+            profile: true
+          }
+        },
+        directMessages: {
+          take: 1,
+          orderBy: {
+            createdAt: "desc"
+          }
+        }
+      }
+    });
+    const activeConversations = conversations.filter((conv) => conv.directMessages.length > 0).sort((a, b) => {
+      const aTime = a.directMessages[0]?.createdAt.getTime() || 0;
+      const bTime = b.directMessages[0]?.createdAt.getTime() || 0;
+      return bTime - aTime;
+    });
+    return res.status(200).json({
+      conversations: activeConversations,
+      currentMemberId: currentMember.id
+    });
+  } catch (error) {
+    console.error("[GET_CONVERSATIONS]", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 };
 
-// src/middlewares/authMiddleware.ts
-var import_node2 = require("better-auth/node");
-var authMiddleware = async (req, res, next) => {
-  const session = await auth.api.getSession({
-    headers: (0, import_node2.fromNodeHeaders)(req.headers)
+// src/routes/conversations.ts
+var router2 = (0, import_express3.Router)();
+router2.get("/", getConversations);
+var conversations_default = router2;
+
+// src/config/routes.ts
+function setupRoutes(app2) {
+  app2.get("/api/auth/session", async (req, res) => {
+    const internalSecret = req.headers["x-internal-secret"];
+    if (internalSecret !== process.env.SERVER_INTERNAL_SECRET) {
+      logger_default.warn(`[Auth] Forbidden introspection attempt from ${req.ip}`);
+      return res.status(403).json({ error: "Forbidden - Invalid internal secret" });
+    }
+    const session = await auth.api.getSession({
+      headers: req.headers
+    });
+    res.json({ data: session });
   });
-  console.log("[Auth] Session result:", session ? "FOUND" : "NULL");
-  if (session) {
-    res.locals.userId = session.user.id;
-    res.locals.user = session.user;
-    return next();
-  }
-  const internalSecret = req.headers["x-internal-secret"];
-  const bridgedUserId = req.headers["x-user-id"];
-  console.log("[Auth] Bridged Auth Attempt:", {
-    hasSecret: !!internalSecret,
-    hasUserId: !!bridgedUserId,
-    secretMatch: internalSecret === process.env.SERVER_INTERNAL_SECRET
+  app2.all("/api/auth/*", (0, import_node3.toNodeHandler)(auth));
+  app2.get("/health", (req, res) => {
+    res.json({
+      status: "ok",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      uptime: process.uptime()
+    });
   });
-  if (internalSecret && internalSecret === process.env.SERVER_INTERNAL_SECRET && bridgedUserId) {
-    res.locals.userId = bridgedUserId;
-    return next();
-  }
-  if (process.env.NODE_ENV !== "production" && bridgedUserId) {
-    console.warn(
-      "[Auth] WARNING: Using insecure fallback userId:",
-      bridgedUserId
-    );
-    res.locals.userId = bridgedUserId;
-    return next();
-  }
-  console.error("[Auth] Authentication FAILED for:", req.url);
-  return res.status(401).json({ error: "Unauthorized - No valid session or secure bridge found" });
-};
+  app2.use(authMiddleware);
+  app2.use("/api/messages", socket_default);
+  app2.use("/api/conversations", conversations_default);
+  app2.use(errorHandler);
+}
+
+// src/config/shutdown.ts
+function setupGracefulShutdown(httpServer2) {
+  const shutdown = async (signal) => {
+    logger_default.info(`
+[${signal}] Shutting down gracefully...`);
+    if (httpServer2) {
+      httpServer2.close(async () => {
+        logger_default.info("Http server closed.");
+        try {
+          await prisma.$disconnect();
+          logger_default.info("Database connection closed.");
+          process.exit(0);
+        } catch (err) {
+          logger_default.error("Error during database disconnection:", err);
+          process.exit(1);
+        }
+      });
+    } else {
+      try {
+        await prisma.$disconnect();
+        process.exit(0);
+      } catch (err) {
+        process.exit(1);
+      }
+    }
+    setTimeout(() => {
+      logger_default.warn(
+        "Could not close connections in time, forcefully shutting down."
+      );
+      process.exit(1);
+    }, 1e4);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
 
 // src/server.ts
-var import_node3 = require("better-auth/node");
 import_dotenv.default.config();
 var port = process.env.PORT || 7272;
-var app = (0, import_express2.default)();
-var allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["http://localhost:3000"];
-app.use(import_express2.default.json());
-app.use((0, import_cookie_parser.default)());
-app.use(
-  (0, import_cors.default)({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true
-  })
-);
-app.use((req, res, next) => {
-  logger_default.info(`[Request] ${req.method} ${req.url}`);
-  next();
-});
-var limiter = (0, import_express_rate_limit.rateLimit)({
-  windowMs: 15 * 60 * 1e3,
-  // 15 minutes
-  max: 100,
-  // Limit each IP to 100 requests per `window`
-  standardHeaders: true,
-  legacyHeaders: false
-});
-app.use(limiter);
-app.all("/api/auth/*", (0, import_node3.toNodeHandler)(auth));
-app.get("/api/auth/session", async (req, res) => {
-  const internalSecret = req.headers["x-internal-secret"];
-  if (internalSecret !== process.env.SERVER_INTERNAL_SECRET) {
-    logger_default.warn(`[Auth] Forbidden introspection attempt from ${req.ip}`);
-    return res.status(403).json({ error: "Forbidden - Invalid internal secret" });
-  }
-  const session = await auth.api.getSession({
-    headers: req.headers
-  });
-  res.json({ data: session });
-});
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    uptime: process.uptime()
-  });
-});
-app.use(authMiddleware);
-app.use("/api/messages", socket_default);
+var app = createApp();
+setupRoutes(app);
 var server = import_http.default.createServer(app);
-var io2 = new import_socket3.Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ["GET", "POST"]
-  },
-  transports: ["websocket", "polling"],
-  allowEIO3: true
-});
-io2.use(async (socket, next) => {
-  console.log("[Socket.io] New connection attempt");
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders3(socket.handshake.headers)
-  });
-  if (!session) {
-    console.warn("[Socket.io] Unauthenticated connection attempt rejected");
-    return next(new Error("Authentication failed"));
-  }
-  socket.user = {
-    id: session.user.id,
-    name: session.user.name,
-    imageUrl: session.user.image || "",
-    email: session.user.email
-  };
-  logger_default.info(`[Socket.io] User authenticated: ${socket.user.id}`);
-  next();
-});
-function fromNodeHeaders3(nodeHeaders) {
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(nodeHeaders)) {
-    if (Array.isArray(value)) {
-      value.forEach((v) => headers.append(key, v));
-    } else if (value) {
-      headers.set(key, value);
-    }
-  }
-  return headers;
-}
-io2.on("connection", (socket) => {
-  logger_default.info(`[Socket.io] Client connected: ${socket.id}`);
-  socket.join(socket.user?.id);
-  socket.onAny((event, ...args) => {
-    logger_default.info(event, args);
-  });
-  const activeUsers = [];
-  for (let [id, socket2] of io2.of("/").sockets) {
-    activeUsers.push({
-      socketId: id,
-      ...socket2.handshake.auth
-    });
-  }
-  socket.emit("active-users", activeUsers);
-  socket.broadcast.emit("user connected", {
-    socketId: socket.id,
-    userData: { ...socket.handshake.auth }
-  });
-  socket.emit("session", {
-    user: socket.user
-  });
-  socket.on("private message", async ({ content, to }) => {
-    io2.to(to).to(socket.user.id).emit("private message", {
-      ...content,
-      from: socket.user,
-      to
-    });
-    logger_default.info(socket.user.id);
-    try {
-      const conversation = await findOrCreateConversation(socket.user.id, to);
-      if (!conversation) return;
-      const member = conversation.memberOne.profileId === socket.user.id ? conversation.memberOne : conversation.memberTwo;
-      await prisma.directMessage.create({
-        data: {
-          content: content.content || content,
-          // Handle both object and string
-          conversationId: conversation.id,
-          memberId: member.id
-        }
-      });
-    } catch (err) {
-      logger_default.error(err);
-    }
-  });
-  socket.on("markAsRead", async ({ senderId }) => {
-    try {
-      const receiverId = socket.user.id;
-      await prisma.directMessage.updateMany({
-        where: {
-          member: {
-            profileId: senderId
-          },
-          conversation: {
-            OR: [
-              { memberOneId: receiverId, memberTwoId: senderId },
-              { memberOneId: senderId, memberTwoId: receiverId }
-            ]
-          },
-          seen: false
-        },
-        data: {
-          seen: true
-        }
-      });
-      io2.to(senderId).emit("markAsRead", { senderId, receiverId });
-    } catch (error) {
-      logger_default.error("\u274C Error marking messages as read:", error);
-    }
-  });
-  socket.on("typing", (to) => {
-    socket.broadcast.to(to).emit("broadcast typing", {});
-  });
-  const notifications = [];
-  socket.on("notification", (arg) => {
-    socket.broadcast.to(arg.to).emit("notification", arg.notification);
-  });
-  socket.on("notification-acknowledgment", (notificationId) => {
-  });
-  socket.on("disconnect", async () => {
-    const matchingSockets = await io2.in(socket.user.id).fetchSockets();
-  });
-});
-app.use(errorHandler);
+initializeSocket(server, allowedOrigins);
 var httpServer;
 if (process.env.NODE_ENV !== "test") {
   httpServer = server.listen(Number(port), "0.0.0.0", () => {
@@ -1057,41 +1167,9 @@ if (process.env.NODE_ENV !== "test") {
     logger_default.info(`Allowed origins: ${allowedOrigins}`);
   });
 }
-var shutdown = async (signal) => {
-  logger_default.info(`
-[${signal}] Shutting down gracefully...`);
-  if (httpServer) {
-    httpServer.close(async () => {
-      logger_default.info("Http server closed.");
-      try {
-        await prisma.$disconnect();
-        logger_default.info("Database connection closed.");
-        process.exit(0);
-      } catch (err) {
-        logger_default.error("Error during database disconnection:", err);
-        process.exit(1);
-      }
-    });
-  } else {
-    try {
-      await prisma.$disconnect();
-      process.exit(0);
-    } catch (err) {
-      process.exit(1);
-    }
-  }
-  setTimeout(() => {
-    logger_default.warn(
-      "Could not close connections in time, forcefully shutting down."
-    );
-    process.exit(1);
-  }, 1e4);
-};
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
+setupGracefulShutdown(httpServer);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  app,
-  io
+  app
 });
 //# sourceMappingURL=server.js.map
