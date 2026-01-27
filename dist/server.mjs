@@ -1002,36 +1002,51 @@ var getConversations = async (req, res) => {
   try {
     const { serverId } = req.query;
     const userId = res.locals.userId;
-    if (!serverId) {
-      return res.status(400).json({ error: "Server ID missing" });
-    }
-    const currentMember = await prisma.member.findFirst({
+    const profile = await prisma.profile.findFirst({
       where: {
-        serverId,
-        profile: {
-          userId
-        }
+        userId
+      },
+      include: {
+        members: true
       }
     });
-    if (!currentMember) {
-      return res.status(404).json({ error: "Member not found" });
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+    let memberIds = [];
+    if (serverId) {
+      const currentMember = profile.members.find(
+        (m) => m.serverId === serverId
+      );
+      if (!currentMember) {
+        return res.status(404).json({ error: "Member not found in this server" });
+      }
+      memberIds = [currentMember.id];
+    } else {
+      memberIds = profile.members.map((m) => m.id);
+    }
+    if (memberIds.length === 0) {
+      return res.status(200).json({ conversations: [], currentMemberId: null });
     }
     const conversations = await prisma.conversation.findMany({
       where: {
         OR: [
-          { memberOneId: currentMember.id },
-          { memberTwoId: currentMember.id }
+          { memberOneId: { in: memberIds } },
+          { memberTwoId: { in: memberIds } }
         ]
       },
       include: {
         memberOne: {
           include: {
-            profile: true
+            profile: true,
+            server: true
+            // Include server info so user knows which server the DM is from
           }
         },
         memberTwo: {
           include: {
-            profile: true
+            profile: true,
+            server: true
           }
         },
         directMessages: {
@@ -1049,7 +1064,10 @@ var getConversations = async (req, res) => {
     });
     return res.status(200).json({
       conversations: activeConversations,
-      currentMemberId: currentMember.id
+      // For global, we might not have a single currentMemberId that makes sense
+      // if we're rendering multiple conversations from different servers.
+      // But we can return the array of memberIds or handle it in the frontend.
+      currentMemberIds: memberIds
     });
   } catch (error) {
     console.error("[GET_CONVERSATIONS]", error);
@@ -1061,6 +1079,82 @@ var getConversations = async (req, res) => {
 var router2 = Router2();
 router2.get("/", getConversations);
 var conversations_default = router2;
+
+// src/routes/link-preview.ts
+import { Router as Router3 } from "express";
+
+// src/controllers/link-preview-controller.ts
+import axios from "axios";
+var getLinkPreview = async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ error: "URL is required" });
+    }
+    try {
+      new URL(url);
+    } catch (e) {
+      return res.status(400).json({ error: "Invalid URL" });
+    }
+    logger_default.info(`[LinkPreview] Fetching metadata for: ${url}`);
+    const response = await axios.get(url, {
+      timeout: 5e3,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AuraBot/1.0; +http://aura-app.link)"
+      }
+    });
+    const html = response.data;
+    const getMeta = (property) => {
+      const regex = new RegExp(
+        `<meta [^>]*property=["']${property}["'] [^>]*content=["']([^"']*)["']`,
+        "i"
+      );
+      const match = html.match(regex);
+      if (match) return match[1];
+      const altRegex = new RegExp(
+        `<meta [^>]*content=["']([^"']*)["'] [^>]*property=["']${property}["']`,
+        "i"
+      );
+      const altMatch = html.match(altRegex);
+      if (altMatch) return altMatch[1];
+      const nameRegex = new RegExp(
+        `<meta [^>]*name=["']${property}["'] [^>]*content=["']([^"']*)["']`,
+        "i"
+      );
+      const nameMatch = html.match(nameRegex);
+      return nameMatch ? nameMatch[1] : null;
+    };
+    const title = getMeta("og:title") || html.match(/<title>(.*?)<\/title>/i)?.[1] || "Untitled";
+    const description = getMeta("og:description") || getMeta("description") || "";
+    const image = getMeta("og:image") || null;
+    let favIcon = html.match(
+      /<link [^>]*rel=["'](?:shortcut )?icon["'] [^>]*href=["']([^"']*)["']/i
+    )?.[1];
+    if (favIcon && !favIcon.startsWith("http")) {
+      const urlObj = new URL(url);
+      if (favIcon.startsWith("/")) {
+        favIcon = `${urlObj.origin}${favIcon}`;
+      } else {
+        favIcon = `${urlObj.origin}/${favIcon}`;
+      }
+    }
+    return res.json({
+      title: title.trim(),
+      description: description.trim(),
+      image,
+      favIcon,
+      url
+    });
+  } catch (error) {
+    logger_default.error(`[LinkPreview] Error fetching metadata: ${error.message}`);
+    return res.status(500).json({ error: "Failed to fetch metadata" });
+  }
+};
+
+// src/routes/link-preview.ts
+var router3 = Router3();
+router3.get("/", getLinkPreview);
+var link_preview_default = router3;
 
 // src/config/routes.ts
 function setupRoutes(app2) {
@@ -1086,6 +1180,7 @@ function setupRoutes(app2) {
   app2.use(authMiddleware);
   app2.use("/api/messages", socket_default);
   app2.use("/api/conversations", conversations_default);
+  app2.use("/api/link-preview", link_preview_default);
   app2.use(errorHandler);
 }
 

@@ -5,6 +5,7 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 import { errorHandler } from "../middlewares/errorHandler";
 import socketRoutes from "../routes/socket";
 import conversationsRoutes from "../routes/conversations";
+import linkPreviewRoutes from "../routes/link-preview";
 import logger from "../libs/logger";
 
 export function setupRoutes(app: Application): void {
@@ -43,6 +44,7 @@ export function setupRoutes(app: Application): void {
   // Protected Routes
   app.use("/api/messages", socketRoutes);
   app.use("/api/conversations", conversationsRoutes);
+  app.use("/api/link-preview", linkPreviewRoutes);
 
   // Centralized error handling (MUST be after all routes)
   app.use(errorHandler);
