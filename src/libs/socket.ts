@@ -1,18 +1,21 @@
-import { Server } from "socket.io";
-import { PrismaClient } from "@prisma/client";
-import { auth } from "./auth";
-import { findOrCreateConversation } from "./conversation";
-import { prisma } from "./db";
-import logger from "./logger";
-import { CustomSocket } from "../types";
 import http from "http";
+import "@/events/message.handler";
+import { Server } from "socket.io";
+import { auth } from "@/core/auth";
+import { prisma } from "@/core/db";
+import logger from "@/core/logger";
+import { Application } from "express";
+import { CustomSocket } from "@/types";
+import { socketService } from "@/services/socket";
 import { fromNodeHeaders } from "better-auth/node";
+import { findOrCreateConversation } from "@/services/conversation";
 
 export let io: Server;
 
 export const initializeSocket = (
   httpServer: http.Server,
   allowedOrigins: string[],
+  app: Application,
 ) => {
   io = new Server(httpServer, {
     cors: {
@@ -23,6 +26,12 @@ export const initializeSocket = (
     transports: ["websocket", "polling"],
     allowEIO3: true,
   });
+
+  // Initialize SocketService
+  socketService.initialize(io);
+
+  // Attach io instance to Express app so controllers can access it
+  app.set("io", io);
 
   //  middleware for io
   io.use(async (socket: CustomSocket, next) => {
@@ -52,6 +61,19 @@ export const initializeSocket = (
   io.on("connection", (socket: CustomSocket) => {
     logger.info(`[Socket.io] Client connected: ${socket.id}`);
     socket.join(socket.user?.id as string);
+
+    // Update user status to online
+    prisma.user
+      .update({
+        where: { id: socket.user.id },
+        data: { isOnline: true },
+      })
+      .catch((err) =>
+        logger.error(
+          `[Socket.io] Error updating online status for ${socket.user.id}:`,
+          err,
+        ),
+      );
 
     // A catch-all listener
     socket.onAny((event, ...args) => {
@@ -160,12 +182,32 @@ export const initializeSocket = (
 
     // Disconnect user
     socket.on("disconnect", async () => {
-      const matchingSockets = await io.in(socket.user.id).fetchSockets();
-      // const isDisconnected = matchingSockets.size === 0;
-      // if (isDisconnected) {
-      //   socket.broadcast.emit("user disconnected", socket.user.id);
-      //   // update the connection status of the session
-      // }
+      logger.info(`[Socket.io] Client disconnected: ${socket.id}`);
+
+      const userId = socket.user.id;
+      const matchingSockets = await io.in(userId).fetchSockets();
+      const isStillConnected = matchingSockets.length > 0;
+
+      if (!isStillConnected) {
+        logger.info(
+          `[Socket.io] Last connection for user ${userId} closed. Marking offline.`,
+        );
+        try {
+          await (prisma.user.update as any)({
+            where: { id: userId },
+            data: {
+              isOnline: false,
+              lastSeenAt: new Date(),
+            },
+          });
+          socket.broadcast.emit("user disconnected", userId);
+        } catch (err) {
+          logger.error(
+            `[Socket.io] Error updating offline status for ${userId}:`,
+            err,
+          );
+        }
+      }
     });
   });
 };

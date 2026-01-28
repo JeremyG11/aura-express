@@ -1,13 +1,14 @@
 import { Request, Response } from "express";
 import axios from "axios";
-import logger from "../libs/logger";
+import logger from "@/core/logger";
+import { ApiResponse } from "@/utils/api-response";
 
 export const getLinkPreview = async (req: Request, res: Response) => {
   try {
     const { url } = req.query;
 
     if (!url || typeof url !== "string") {
-      return res.status(400).json({ error: "URL is required" });
+      return ApiResponse.error(res, "URL is required", 400);
     }
 
     const apiKey = process.env.OPENGRAPH_IO_KEY;
@@ -16,9 +17,11 @@ export const getLinkPreview = async (req: Request, res: Response) => {
       logger.error(
         "[LinkPreview] OPENGRAPH_IO_KEY is missing in environment variables.",
       );
-      return res
-        .status(500)
-        .json({ error: "Link preview service is not configured." });
+      return ApiResponse.error(
+        res,
+        "Link preview service is not configured.",
+        500,
+      );
     }
 
     logger.info(`[LinkPreview] Fetching from OpenGraph.io for: ${url}`);
@@ -30,7 +33,7 @@ export const getLinkPreview = async (req: Request, res: Response) => {
 
     if (data.error) {
       logger.error(`[OpenGraph.io] Error: ${data.error.message}`);
-      return res.status(400).json({ error: data.error.message });
+      return ApiResponse.error(res, data.error.message, 400);
     }
 
     // Transform OpenGraph.io response to our simplified format
@@ -45,29 +48,38 @@ export const getLinkPreview = async (req: Request, res: Response) => {
       // Ignore
     }
 
-    return res.json({
-      title:
-        hybrid.title || openGraph.title || htmlInferred.title || fallbackTitle,
-      description:
-        hybrid.description ||
-        openGraph.description ||
-        htmlInferred.description ||
-        "",
-      image: hybrid.image || openGraph.image || htmlInferred.image || null,
-      favIcon: data.favicon || null,
-      url: data.url || url,
-    });
+    return ApiResponse.success(
+      res,
+      {
+        title:
+          hybrid.title ||
+          openGraph.title ||
+          htmlInferred.title ||
+          fallbackTitle,
+        description:
+          hybrid.description ||
+          openGraph.description ||
+          htmlInferred.description ||
+          "",
+        image: hybrid.image || openGraph.image || htmlInferred.image || null,
+        favIcon: data.favicon || null,
+        url: data.url || url,
+      },
+      "Link preview fetched",
+    );
   } catch (error: any) {
     if (axios.isAxiosError(error) && error.response) {
       logger.error(
         `[LinkPreview] OpenGraph.io returned ${error.response.status}: ${JSON.stringify(error.response.data)}`,
       );
-      return res.status(error.response.status).json({
-        error: error.response.data.error?.message || "External service error",
-      });
+      return ApiResponse.error(
+        res,
+        error.response.data.error?.message || "External service error",
+        error.response.status,
+      );
     }
 
     logger.error(`[LinkPreview] Unexpected Error: ${error.message}`);
-    return res.status(500).json({ error: "Failed to fetch link preview" });
+    return ApiResponse.error(res, "Failed to fetch link preview");
   }
 };

@@ -2,7 +2,7 @@ import express, { Application } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { rateLimit } from "express-rate-limit";
-import logger from "../libs/logger";
+import logger from "@/core/logger";
 
 // CORS configuration - support multiple origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -13,6 +13,8 @@ export { allowedOrigins };
 
 export function createApp(): Application {
   const app: Application = express();
+
+  app.set("trust proxy", 1);
 
   // Basic middleware
   app.use(express.json());
@@ -42,7 +44,7 @@ export function createApp(): Application {
   // Rate limiting to prevent DoS/Brute-force
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per `window`
+    max: 1000, // Increased limit for development/active usage
     standardHeaders: true,
     legacyHeaders: false,
   });

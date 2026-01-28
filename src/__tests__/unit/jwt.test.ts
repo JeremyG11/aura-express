@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { signJwt, verifyJwt } from "../../utils/jwt";
+import { signJwt, verifyJwt } from "@/utils/jwt";
 
 describe("JWT Utility", () => {
   const secret = "test-secret";

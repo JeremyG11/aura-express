@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { getLinkPreview } from "../controllers/link-preview-controller";
+import { getLinkPreview } from "@/controllers/link-preview";
 
-const router = Router();
+const router: Router = Router();
 
 router.get("/", getLinkPreview);
 

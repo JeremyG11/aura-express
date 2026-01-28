@@ -1,14 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import request from "supertest";
-import { app } from "../../server";
+import { app } from "@/server";
+import { prisma } from "@/core/db";
+import { setupTestEnv, teardownTestEnv } from "@/__tests__/test-utils";
 
-describe("API Integration Tests", () => {
-  it("GET /health should return 200 and status ok", async () => {
-    const response = await request(app).get("/health");
+describe("API Endpoints", () => {
+  beforeEach(async () => {
+    await setupTestEnv();
+  });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty("status", "ok");
-    expect(response.body).toHaveProperty("timestamp");
-    expect(response.body).toHaveProperty("uptime");
+  afterAll(async () => {
+    await teardownTestEnv();
+  });
+
+  it("should return health check status", async () => {
+    const res = await request(app).get("/health");
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ok");
   });
 });

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { prisma } from "../libs/db";
+import { prisma } from "@/core/db";
+import { ApiResponse } from "@/utils/api-response";
 
 /**
  * Get all active conversations for the current user in a specific server
@@ -21,7 +22,7 @@ export const getConversations = async (req: Request, res: Response) => {
     });
 
     if (!profile) {
-      return res.status(404).json({ error: "Profile not found" });
+      return ApiResponse.error(res, "Profile not found", 404);
     }
 
     let memberIds: string[] = [];
@@ -33,9 +34,7 @@ export const getConversations = async (req: Request, res: Response) => {
       );
 
       if (!currentMember) {
-        return res
-          .status(404)
-          .json({ error: "Member not found in this server" });
+        return ApiResponse.error(res, "Member not found in this server", 404);
       }
       memberIds = [currentMember.id];
     } else {
@@ -44,7 +43,10 @@ export const getConversations = async (req: Request, res: Response) => {
     }
 
     if (memberIds.length === 0) {
-      return res.status(200).json({ conversations: [], currentMemberId: null });
+      return ApiResponse.success(res, {
+        conversations: [],
+        currentMemberId: null,
+      });
     }
 
     // Find all conversations where any of the current user's members are involved
@@ -87,15 +89,12 @@ export const getConversations = async (req: Request, res: Response) => {
         return bTime - aTime; // Most recent first
       });
 
-    return res.status(200).json({
+    return ApiResponse.success(res, {
       conversations: activeConversations,
-      // For global, we might not have a single currentMemberId that makes sense
-      // if we're rendering multiple conversations from different servers.
-      // But we can return the array of memberIds or handle it in the frontend.
       currentMemberIds: memberIds,
     });
   } catch (error) {
     console.error("[GET_CONVERSATIONS]", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return ApiResponse.error(res, "Internal server error");
   }
 };

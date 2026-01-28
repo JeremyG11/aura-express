@@ -1,10 +1,8 @@
 import http from "http";
-import { prisma } from "../libs/db";
-import logger from "../libs/logger";
+import { prisma } from "@/core/db";
+import logger from "@/core/logger";
 
-export function setupGracefulShutdown(
-  httpServer: http.Server | undefined,
-): void {
+export function serverShutdown(httpServer: http.Server | undefined): void {
   const shutdown = async (signal: string) => {
     logger.info(`\n[${signal}] Shutting down gracefully...`);
 
