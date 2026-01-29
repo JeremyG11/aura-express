@@ -1385,19 +1385,6 @@ var ReactionService = class {
     const { userId, emoji, messageId, directMessageId } = payload;
     const profile = await getProfileByUserId(userId);
     if (!profile) throw new NotFoundError("Profile not found");
-    const reaction = await prisma.reaction.create({
-      data: {
-        emoji,
-        profileId: profile.id,
-        messageId,
-        directMessageId
-      },
-      include: {
-        profile: {
-          select: { id: true, name: true, imageUrl: true }
-        }
-      }
-    });
     let authorProfileId = null;
     let authorUserId = null;
     if (messageId) {
@@ -1415,6 +1402,51 @@ var ReactionService = class {
       authorProfileId = directMessage?.member.profile.id || null;
       authorUserId = directMessage?.member.profile.userId || null;
     }
+    const existingReaction = await prisma.reaction.findFirst({
+      where: {
+        profileId: profile.id,
+        messageId,
+        directMessageId
+      }
+    });
+    if (existingReaction) {
+      if (existingReaction.emoji === emoji) {
+        await prisma.reaction.delete({
+          where: { id: existingReaction.id }
+        });
+        events.emit(REACTION_EVENTS.REMOVED, { reaction: existingReaction });
+        return null;
+      }
+      const updatedReaction = await prisma.reaction.update({
+        where: { id: existingReaction.id },
+        data: { emoji },
+        include: {
+          profile: {
+            select: { id: true, name: true, imageUrl: true }
+          }
+        }
+      });
+      events.emit(REACTION_EVENTS.ADDED, {
+        reaction: updatedReaction,
+        authorProfileId,
+        authorUserId,
+        senderProfileId: profile.id
+      });
+      return updatedReaction;
+    }
+    const reaction = await prisma.reaction.create({
+      data: {
+        emoji,
+        profileId: profile.id,
+        messageId,
+        directMessageId
+      },
+      include: {
+        profile: {
+          select: { id: true, name: true, imageUrl: true }
+        }
+      }
+    });
     events.emit(REACTION_EVENTS.ADDED, {
       reaction,
       authorProfileId,
@@ -1650,15 +1682,26 @@ var NotificationService = class {
    */
   static async createNotification(payload) {
     try {
-      const { senderId, receiverId, messageId, channelId, serverId, ...rest } = payload;
+      const {
+        senderId,
+        receiverId,
+        messageId,
+        channelId,
+        serverId,
+        conversationId,
+        emoji,
+        ...rest
+      } = payload;
       const notification = await prisma.notification.create({
         data: {
           ...rest,
           sender: { connect: { id: senderId } },
           receiver: { connect: { id: receiverId } },
-          ...messageId && { message: { connect: { id: messageId } } },
-          ...channelId && { channel: { connect: { id: channelId } } },
-          ...serverId && { server: { connect: { id: serverId } } }
+          messageId,
+          channelId,
+          serverId,
+          conversationId,
+          emoji
         }
       });
       const receiverProfile = await prisma.profile.findUnique({

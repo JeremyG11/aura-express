@@ -18,20 +18,6 @@ export class ReactionService {
     const profile = await getProfileByUserId(userId);
     if (!profile) throw new NotFoundError("Profile not found");
 
-    const reaction = await prisma.reaction.create({
-      data: {
-        emoji,
-        profileId: profile.id,
-        messageId,
-        directMessageId,
-      },
-      include: {
-        profile: {
-          select: { id: true, name: true, imageUrl: true },
-        },
-      },
-    });
-
     // Determine message author for notification
     let authorProfileId: string | null = null;
     let authorUserId: string | null = null;
@@ -51,6 +37,61 @@ export class ReactionService {
       authorProfileId = directMessage?.member.profile.id || null;
       authorUserId = directMessage?.member.profile.userId || null;
     }
+
+    // Check if user already has a reaction on this message
+    const existingReaction = await prisma.reaction.findFirst({
+      where: {
+        profileId: profile.id,
+        messageId,
+        directMessageId,
+      },
+    });
+
+    if (existingReaction) {
+      // If it's the same emoji, remove it (toggle off)
+      if (existingReaction.emoji === emoji) {
+        await prisma.reaction.delete({
+          where: { id: existingReaction.id },
+        });
+
+        events.emit(REACTION_EVENTS.REMOVED, { reaction: existingReaction });
+        return null;
+      }
+
+      // If it's a different emoji, update the existing reaction
+      const updatedReaction = await prisma.reaction.update({
+        where: { id: existingReaction.id },
+        data: { emoji },
+        include: {
+          profile: {
+            select: { id: true, name: true, imageUrl: true },
+          },
+        },
+      });
+
+      events.emit(REACTION_EVENTS.ADDED, {
+        reaction: updatedReaction,
+        authorProfileId,
+        authorUserId,
+        senderProfileId: profile.id,
+      });
+
+      return updatedReaction;
+    }
+
+    const reaction = await prisma.reaction.create({
+      data: {
+        emoji,
+        profileId: profile.id,
+        messageId,
+        directMessageId,
+      },
+      include: {
+        profile: {
+          select: { id: true, name: true, imageUrl: true },
+        },
+      },
+    });
 
     events.emit(REACTION_EVENTS.ADDED, {
       reaction,

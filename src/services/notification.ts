@@ -15,19 +15,31 @@ export class NotificationService {
     messageId?: string;
     channelId?: string;
     serverId?: string;
+    conversationId?: string;
+    emoji?: string;
   }) {
     try {
-      const { senderId, receiverId, messageId, channelId, serverId, ...rest } =
-        payload;
+      const {
+        senderId,
+        receiverId,
+        messageId,
+        channelId,
+        serverId,
+        conversationId,
+        emoji,
+        ...rest
+      } = payload;
 
       const notification = await prisma.notification.create({
         data: {
           ...rest,
           sender: { connect: { id: senderId } },
           receiver: { connect: { id: receiverId } },
-          ...(messageId && { message: { connect: { id: messageId } } }),
-          ...(channelId && { channel: { connect: { id: channelId } } }),
-          ...(serverId && { server: { connect: { id: serverId } } }),
+          messageId,
+          channelId,
+          serverId,
+          conversationId,
+          emoji,
         },
       });
 
