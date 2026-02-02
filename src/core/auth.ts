@@ -8,10 +8,10 @@ import {
 } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 
-import { prisma } from "./db";
-import { ac, roles } from "./permissions";
-import { hashPassword, verifyPassword } from "./argon2";
-import { sendEmailAction } from "./email";
+import { prisma } from "@/core/db";
+import { ac, roles } from "@/utils/permissions";
+import { sendEmailAction } from "@/email/email";
+import { hashPassword, verifyPassword } from "@/libs/argon2";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {

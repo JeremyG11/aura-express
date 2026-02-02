@@ -1,10 +1,11 @@
+import "module-alias/register";
 import dotenv from "dotenv";
 import http from "http";
-import { createApp, allowedOrigins } from "./config/app";
-import { setupRoutes } from "./config/routes";
-import { setupGracefulShutdown } from "./config/shutdown";
-import { initializeSocket } from "./libs/socket";
-import logger from "./libs/logger";
+import logger from "@/core/logger";
+import { setupRoutes } from "@/config/routes";
+import { initializeSocket } from "@/libs/socket";
+import { createApp, allowedOrigins } from "@/config/app";
+import { serverShutdown } from "@/config/shutdown";
 
 dotenv.config();
 
@@ -20,7 +21,7 @@ setupRoutes(app);
 const server = http.createServer(app);
 
 // Initialize Socket.IO
-initializeSocket(server, allowedOrigins);
+initializeSocket(server, allowedOrigins, app);
 
 // Start server
 let httpServer: http.Server | undefined;
@@ -33,4 +34,4 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // Setup graceful shutdown
-setupGracefulShutdown(httpServer);
+serverShutdown(httpServer);

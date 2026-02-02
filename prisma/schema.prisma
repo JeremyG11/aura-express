@@ -24,6 +24,11 @@ model Profile {
   updatedAt DateTime @updatedAt
 
   publicKey String?
+  
+  // Notification relations
+  notificationsSent     Notification[] @relation("NotificationSender")
+  notificationsReceived Notification[] @relation("NotificationReceiver")
+  reactions             Reaction[]
 }
 
 enum UserRole {
@@ -36,7 +41,7 @@ model User {
   name          String
   email         String    @unique
   emailVerified Boolean?
-  imageUrl      String?   @map("image")
+  image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   role          UserRole  @default(USER)
@@ -44,13 +49,13 @@ model User {
   banReason     String?
   banExpires    DateTime?
 
-  isOnline      Boolean   @default(false)
-
   sessions      Session[]
   accounts      Account[]
   passkeys      Passkey[]
 
   twoFactorEnabled Boolean?
+  isOnline         Boolean   @default(false)
+  lastSeenAt       DateTime?
   
   profile       Profile?
 
@@ -188,6 +193,10 @@ model Message {
   channelId String @db.ObjectId
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
+  parentId String? @db.ObjectId
+  parent Message? @relation("MessageThread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies Message[] @relation("MessageThread")
+
   deleted Boolean @default(false)
   seen Boolean @default(false)
   isEncrypted Boolean @default(false)
@@ -197,6 +206,7 @@ model Message {
 
   @@index([channelId])
   @@index([memberId])
+  @@index([parentId])
 }
 
 model Conversation {
@@ -226,6 +236,10 @@ model DirectMessage {
   conversationId String @db.ObjectId
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  parentId String? @db.ObjectId
+  parent DirectMessage? @relation("DirectMessageThread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies DirectMessage[] @relation("DirectMessageThread")
+
   deleted Boolean @default(false)
   seen Boolean @default(false)
 
@@ -234,6 +248,7 @@ model DirectMessage {
 
   @@index([memberId])
   @@index([conversationId])
+  @@index([parentId])
 
   isEncrypted Boolean @default(false)
 }
@@ -255,14 +270,58 @@ model Passkey {
   @@map("passkeys")
 }
 
+enum NotificationType {
+  MENTION
+  REPLY
+  REACTION
+  THREAD_REPLY
+}
+
 model Notification {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  id         String           @id @default(auto()) @map("_id") @db.ObjectId
+  type       NotificationType
   content    String
+  
+  // References
   senderId   String   @db.ObjectId
+  sender     Profile  @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  
   receiverId String   @db.ObjectId
-  isSeen     Boolean  @default(false)
+  receiver   Profile  @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  
+  // Context (what was mentioned/reacted to)
+  messageId       String?  @db.ObjectId
+  channelId       String?  @db.ObjectId
+  serverId        String?  @db.ObjectId
+  conversationId  String?  @db.ObjectId
+  
+  // Reaction specific
+  emoji           String?
+  
+  isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
+  
   @@index([receiverId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Reaction {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  emoji     String
+  
+  profileId String   @db.ObjectId
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  messageId String?  @db.ObjectId
+  directMessageId String? @db.ObjectId
+  
+  createdAt DateTime @default(now())
+  
+  @@index([messageId])
+  @@index([directMessageId])
+  @@index([profileId])
+  @@unique([profileId, messageId, emoji])
+  @@unique([profileId, directMessageId, emoji])
 }

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { prisma } from "../libs/db";
+import { prisma } from "@/core/db";
+import { ApiResponse } from "@/utils/api-response";
 
 /**
  * Get all active conversations for the current user in a specific server
@@ -10,41 +11,63 @@ export const getConversations = async (req: Request, res: Response) => {
     const { serverId } = req.query;
     const userId = res.locals.userId;
 
-    if (!serverId) {
-      return res.status(400).json({ error: "Server ID missing" });
-    }
-
-    // Get the current member in this server
-    const currentMember = await prisma.member.findFirst({
+    // Get the current profile
+    const profile = await prisma.profile.findFirst({
       where: {
-        serverId: serverId as string,
-        profile: {
-          userId: userId,
-        },
+        userId: userId,
+      },
+      include: {
+        members: true,
       },
     });
 
-    if (!currentMember) {
-      return res.status(404).json({ error: "Member not found" });
+    if (!profile) {
+      return ApiResponse.error(res, "Profile not found", 404);
     }
 
-    // Find all conversations where the current member is involved
+    let memberIds: string[] = [];
+
+    if (serverId) {
+      // Get the current member in this specific server
+      const currentMember = profile.members.find(
+        (m) => m.serverId === (serverId as string),
+      );
+
+      if (!currentMember) {
+        return ApiResponse.error(res, "Member not found in this server", 404);
+      }
+      memberIds = [currentMember.id];
+    } else {
+      // Global: get all member IDs for this profile across all servers
+      memberIds = profile.members.map((m) => m.id);
+    }
+
+    if (memberIds.length === 0) {
+      return ApiResponse.success(res, {
+        conversations: [],
+        currentMemberId: null,
+      });
+    }
+
+    // Find all conversations where any of the current user's members are involved
     const conversations = await prisma.conversation.findMany({
       where: {
         OR: [
-          { memberOneId: currentMember.id },
-          { memberTwoId: currentMember.id },
+          { memberOneId: { in: memberIds } },
+          { memberTwoId: { in: memberIds } },
         ],
       },
       include: {
         memberOne: {
           include: {
             profile: true,
+            server: true, // Include server info so user knows which server the DM is from
           },
         },
         memberTwo: {
           include: {
             profile: true,
+            server: true,
           },
         },
         directMessages: {
@@ -66,12 +89,12 @@ export const getConversations = async (req: Request, res: Response) => {
         return bTime - aTime; // Most recent first
       });
 
-    return res.status(200).json({
+    return ApiResponse.success(res, {
       conversations: activeConversations,
-      currentMemberId: currentMember.id,
+      currentMemberIds: memberIds,
     });
   } catch (error) {
     console.error("[GET_CONVERSATIONS]", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return ApiResponse.error(res, "Internal server error");
   }
 };

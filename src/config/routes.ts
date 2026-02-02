@@ -1,11 +1,17 @@
 import { Application } from "express";
 import { toNodeHandler } from "better-auth/node";
-import { auth } from "../libs/auth";
-import { authMiddleware } from "../middlewares/authMiddleware";
-import { errorHandler } from "../middlewares/errorHandler";
-import socketRoutes from "../routes/socket";
-import conversationsRoutes from "../routes/conversations";
-import logger from "../libs/logger";
+import { auth } from "@/core/auth";
+import { authMiddleware } from "@/middlewares/authMiddleware";
+import { errorHandler } from "@/middlewares/errorHandler";
+import messageRoutes from "@/routes/messages";
+import conversationsRoutes from "@/routes/conversations";
+import linkPreviewRoutes from "@/routes/link-preview";
+import threadRoutes from "@/routes/threads";
+import notificationRoutes from "@/routes/notifications";
+import reactionRoutes from "@/routes/reactions";
+import membersRoutes from "@/routes/members";
+import channelRoutes from "@/routes/channels";
+import logger from "@/core/logger";
 
 export function setupRoutes(app: Application): void {
   // Session introspection endpoint for aura server-side auth (must be before catch-all)
@@ -41,8 +47,14 @@ export function setupRoutes(app: Application): void {
   app.use(authMiddleware);
 
   // Protected Routes
-  app.use("/api/messages", socketRoutes);
+  app.use("/api/messages", messageRoutes);
   app.use("/api/conversations", conversationsRoutes);
+  app.use("/api/link-preview", linkPreviewRoutes);
+  app.use("/api/threads", threadRoutes);
+  app.use("/api/notifications", notificationRoutes);
+  app.use("/api/reactions", reactionRoutes);
+  app.use("/api/members", membersRoutes);
+  app.use("/api/channels", channelRoutes);
 
   // Centralized error handling (MUST be after all routes)
   app.use(errorHandler);

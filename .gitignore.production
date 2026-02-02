@@ -1,0 +1,2 @@
+# Add Prisma schema for production builds
+prisma/schema.prisma

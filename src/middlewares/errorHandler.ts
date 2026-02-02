@@ -1,4 +1,6 @@
 import { NextFunction, Request, Response } from "express";
+import { ApiResponse } from "@/utils/api-response";
+import { AppError } from "@/utils/errors";
 
 /**
  * Centralized error handler middleware.
@@ -10,13 +12,22 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ) => {
-  const status = err.status || 500;
-  const message = err.message || "Something went wrong";
+  let statusCode = err.statusCode || 500;
+  let message = err.message || "Something went wrong";
 
-  console.error(`[Error] ${req.method} ${req.url} - Status: ${status}`, err);
+  // If it's one of our custom AppErrors, it carries its own metadata
+  if (err instanceof AppError) {
+    statusCode = err.statusCode;
+    message = err.message;
+  }
 
-  res.status(status).json({
-    error: message,
-    stack: process.env.NODE_ENV === "production" ? undefined : err.stack,
-  });
+  // Log only if it's an internal server error or unexpected error
+  if (statusCode >= 500) {
+    console.error(
+      `[Error] ${req.method} ${req.url} - Status: ${statusCode}`,
+      err,
+    );
+  }
+
+  ApiResponse.error(res, message, statusCode, err.stack);
 };
