@@ -1389,6 +1389,7 @@ var ReactionService = class {
         events.emit(REACTION_EVENTS.REMOVED, { reaction: existingReaction });
         return null;
       }
+      const oldReaction = { ...existingReaction };
       const updatedReaction = await prisma.reaction.update({
         where: { id: existingReaction.id },
         data: { emoji },
@@ -1398,6 +1399,7 @@ var ReactionService = class {
           }
         }
       });
+      events.emit(REACTION_EVENTS.REMOVED, { reaction: oldReaction });
       events.emit(REACTION_EVENTS.ADDED, {
         reaction: updatedReaction,
         authorProfileId,
@@ -1575,6 +1577,48 @@ var router7 = Router7();
 router7.get("/server/:serverId", getServerMembers);
 var members_default = router7;
 
+// src/routes/channels.ts
+import { Router as Router8 } from "express";
+
+// src/controllers/channel.ts
+var getServerChannels = async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const userId = res.locals.userId;
+    if (!serverId) {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: {
+          userId
+        }
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const channels = await prisma.channel.findMany({
+      where: {
+        serverId
+      },
+      orderBy: {
+        createdAt: "asc"
+      }
+    });
+    return ApiResponse.success(res, channels);
+  } catch (error) {
+    console.error("[GET_SERVER_CHANNELS]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+
+// src/routes/channels.ts
+var router8 = Router8();
+router8.get("/server/:serverId", getServerChannels);
+var channels_default = router8;
+
 // src/config/routes.ts
 function setupRoutes(app2) {
   app2.get("/api/auth/session", async (req, res) => {
@@ -1604,6 +1648,7 @@ function setupRoutes(app2) {
   app2.use("/api/notifications", notifications_default);
   app2.use("/api/reactions", reactions_default);
   app2.use("/api/members", members_default);
+  app2.use("/api/channels", channels_default);
   app2.use(errorHandler);
 }
 
@@ -1887,6 +1932,14 @@ var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
       socket.broadcast.to(arg.to).emit("notification", arg.notification);
     });
     socket.on("notification-acknowledgment", (notificationId) => {
+    });
+    socket.on("join-room", (room) => {
+      socket.join(room);
+      logger_default.info(`[Socket.io] User ${socket.user.id} joined room ${room}`);
+    });
+    socket.on("leave-room", (room) => {
+      socket.leave(room);
+      logger_default.info(`[Socket.io] User ${socket.user.id} left room ${room}`);
     });
     socket.on("disconnect", async () => {
       logger_default.info(`[Socket.io] Client disconnected: ${socket.id}`);

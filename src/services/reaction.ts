@@ -58,7 +58,8 @@ export class ReactionService {
         return null;
       }
 
-      // If it's a different emoji, update the existing reaction
+      const oldReaction = { ...existingReaction };
+
       const updatedReaction = await prisma.reaction.update({
         where: { id: existingReaction.id },
         data: { emoji },
@@ -69,6 +70,10 @@ export class ReactionService {
         },
       });
 
+      // Notify clients to remove the old emoji count
+      events.emit(REACTION_EVENTS.REMOVED, { reaction: oldReaction });
+
+      // Notify clients to add the new emoji count
       events.emit(REACTION_EVENTS.ADDED, {
         reaction: updatedReaction,
         authorProfileId,

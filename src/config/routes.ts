@@ -10,6 +10,7 @@ import threadRoutes from "@/routes/threads";
 import notificationRoutes from "@/routes/notifications";
 import reactionRoutes from "@/routes/reactions";
 import membersRoutes from "@/routes/members";
+import channelRoutes from "@/routes/channels";
 import logger from "@/core/logger";
 
 export function setupRoutes(app: Application): void {
@@ -53,6 +54,7 @@ export function setupRoutes(app: Application): void {
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/reactions", reactionRoutes);
   app.use("/api/members", membersRoutes);
+  app.use("/api/channels", channelRoutes);
 
   // Centralized error handling (MUST be after all routes)
   app.use(errorHandler);

@@ -180,6 +180,17 @@ export const initializeSocket = (
       // }
     });
 
+    // Room management
+    socket.on("join-room", (room) => {
+      socket.join(room);
+      logger.info(`[Socket.io] User ${socket.user.id} joined room ${room}`);
+    });
+
+    socket.on("leave-room", (room) => {
+      socket.leave(room);
+      logger.info(`[Socket.io] User ${socket.user.id} left room ${room}`);
+    });
+
     // Disconnect user
     socket.on("disconnect", async () => {
       logger.info(`[Socket.io] Client disconnected: ${socket.id}`);
