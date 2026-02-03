@@ -17,3 +17,23 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         sync: false
+
+  - type: web
+    name: node-socket-io-staging
+    branch: staging
+    env: docker
+    plan: free
+    region: ohio
+    dockerContext: .
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: PORT
+        value: 7272
+      - key: NODE_ENV
+        value: staging 
+      - key: DATABASE_URL
+        sync: false 
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false

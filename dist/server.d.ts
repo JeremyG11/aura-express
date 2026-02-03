@@ -1,8 +1,5 @@
-import * as socket_io from 'socket.io';
-import { Server } from 'socket.io';
-import { Application } from 'express';
+import * as express from 'express';
 
-declare const app: Application;
-declare const io: Server<socket_io.DefaultEventsMap, socket_io.DefaultEventsMap, socket_io.DefaultEventsMap, any>;
+declare const app: express.Application;
 
-export { app, io };
+export { app };

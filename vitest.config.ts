@@ -6,4 +6,9 @@ export default defineConfig({
     globals: true,
     exclude: ["**/node_modules/**", "**/dist/**"],
   },
+  resolve: {
+    alias: {
+      "@": "src",
+    },
+  },
 });

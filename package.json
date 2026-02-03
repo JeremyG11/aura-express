@@ -5,9 +5,11 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsup --watch --onSuccess \"node dist/server.js\"",
-    "build": "tsup",
+    "prebuild": "mkdir -p prisma && (cp ../aura/prisma/schema.prisma prisma/schema.prisma 2>/dev/null || echo 'Using existing schema')",
+    "build": "prisma generate && tsup",
     "start": "node dist/server.js",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate --schema=../aura/prisma/schema.prisma || prisma generate",
+    "db:generate": "prisma generate --schema=../aura/prisma/schema.prisma",
     "test": "vitest"
   },
   "keywords": [],
@@ -44,12 +46,16 @@
     "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
+    "module-alias": "^2.2.3",
     "mongodb": "^6.1.0",
     "nodemailer": "^7.0.12",
     "qs": "^6.11.2",
     "socket.io": "^4.7.2",
     "winston": "^3.19.0",
     "zod": "^3.22.4"
+  },
+  "_moduleAliases": {
+    "@": "./src"
   },
   "packageManager": "pnpm@10.20.0"
 }

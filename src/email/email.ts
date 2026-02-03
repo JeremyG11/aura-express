@@ -1,4 +1,4 @@
-import transporter from "./nodemailer";
+import transporter from "@/email/nodemailer";
 
 const styles = {
   container:

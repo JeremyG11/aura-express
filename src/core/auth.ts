@@ -8,21 +8,26 @@ import {
 } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 
-import { prisma } from "./db";
-import { ac, roles } from "./permissions";
-import { hashPassword, verifyPassword } from "./argon2";
-import { sendEmailAction } from "./email";
+import { prisma } from "@/core/db";
+import { ac, roles } from "@/utils/permissions";
+import { sendEmailAction } from "@/email/email";
+import { hashPassword, verifyPassword } from "@/libs/argon2";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "mongodb",
   }),
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: ["http://localhost:3000"],
+  trustedOrigins: [
+    "http://localhost:3000",
+    "http://localhost:7272",
+    "https://node-socket-io-hxb4.onrender.com",
+    process.env.FRONTEND_URL || "",
+  ].filter(Boolean),
 
   emailVerification: {
     sendOnSignUp: true,
-    expiresIn: 60 * 60,
+    expiresIn: 60 * 60, //
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       const link = new URL(url);
@@ -99,6 +104,7 @@ export const auth = betterAuth({
     database: {
       generateId: false,
     },
+    crossOrigin: true,
   },
   socialProviders: {
     google: {
