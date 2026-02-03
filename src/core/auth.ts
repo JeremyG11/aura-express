@@ -118,15 +118,14 @@ export const auth = betterAuth({
   secondaryStorage: {
     get: async (key) => {
       const value = await prisma.verification.findUnique({
-        where: { id: key },
+        where: { identifier: key },
       });
       return value?.value || null;
     },
     set: async (key, value, expiresAt) => {
       await prisma.verification.upsert({
-        where: { id: key },
+        where: { identifier: key },
         create: {
-          id: key,
           identifier: key,
           value,
           expiresAt: new Date(expiresAt),
@@ -139,7 +138,7 @@ export const auth = betterAuth({
     },
     delete: async (key) => {
       await prisma.verification.deleteMany({
-        where: { id: key },
+        where: { identifier: key },
       });
     },
   },

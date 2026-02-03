@@ -161,16 +161,20 @@ async function verifyPassword(data) {
 
 // src/core/auth.ts
 var auth = (0, import_better_auth.betterAuth)({
+  trustProxy: true,
   database: (0, import_prisma.prismaAdapter)(prisma, {
     provider: "mongodb"
   }),
   secret: process.env.BETTER_AUTH_SECRET,
+  baseURL: process.env.BETTER_AUTH_URL || "https://node-socket-io-hxb4.onrender.com",
   trustedOrigins: [
     "http://localhost:3000",
     "http://localhost:7272",
     "https://node-socket-io-hxb4.onrender.com",
-    process.env.FRONTEND_URL || ""
-  ].filter(Boolean),
+    "https://aura-seven-lyart.vercel.app",
+    process.env.FRONTEND_URL,
+    process.env.BETTER_AUTH_URL
+  ].filter((origin) => !!origin),
   emailVerification: {
     sendOnSignUp: true,
     expiresIn: 60 * 60,
@@ -235,6 +239,10 @@ var auth = (0, import_better_auth.betterAuth)({
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60
+    },
+    cookieOptions: {
+      secure: true,
+      sameSite: "none"
     }
   },
   account: {
@@ -248,6 +256,33 @@ var auth = (0, import_better_auth.betterAuth)({
       generateId: false
     },
     crossOrigin: true
+  },
+  secondaryStorage: {
+    get: async (key) => {
+      const value = await prisma.verification.findUnique({
+        where: { identifier: key }
+      });
+      return value?.value || null;
+    },
+    set: async (key, value, expiresAt) => {
+      await prisma.verification.upsert({
+        where: { identifier: key },
+        create: {
+          identifier: key,
+          value,
+          expiresAt: new Date(expiresAt)
+        },
+        update: {
+          value,
+          expiresAt: new Date(expiresAt)
+        }
+      });
+    },
+    delete: async (key) => {
+      await prisma.verification.deleteMany({
+        where: { identifier: key }
+      });
+    }
   },
   socialProviders: {
     google: {
