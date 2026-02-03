@@ -55,7 +55,6 @@ model User {
 
   twoFactorEnabled Boolean?
   isOnline         Boolean   @default(false)
-  lastSeenAt       DateTime?
   
   profile       Profile?
 
@@ -98,8 +97,8 @@ model Account {
 }
 
 model Verification {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  identifier String   @unique
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String    @unique
   value      String
   expiresAt  DateTime
   createdAt  DateTime? @default(now())
