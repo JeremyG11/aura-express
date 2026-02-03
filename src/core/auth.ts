@@ -115,28 +115,8 @@ export const auth = betterAuth({
     },
     crossOrigin: true,
   },
-  secondaryStorage: {
-    get: async (key) => {
-      const value = await prisma.verification.findFirst({
-        where: { identifier: key },
-      });
-      return value?.value || null;
-    },
-    set: async (key, value, expiresAt) => {
-      await prisma.verification.create({
-        data: {
-          identifier: key,
-          value,
-          expiresAt: new Date(expiresAt),
-        },
-      });
-    },
-    delete: async (key) => {
-      await prisma.verification.deleteMany({
-        where: { identifier: key },
-      });
-    },
-  },
+  // We'll rely on robust cookie settings and trustProxy instead of secondaryStorage for now
+  // as state usually works fine if the backend correctly reads its own cookies.
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
