@@ -14,6 +14,14 @@ import channelRoutes from "@/routes/channels";
 import logger from "@/core/logger";
 
 export function setupRoutes(app: Application): void {
+  // Root route to avoid "Cannot GET /"
+  app.get("/", (req, res) => {
+    res.json({
+      message: "Lively Backend API is running",
+      documentation: "/health",
+    });
+  });
+
   // Session introspection endpoint for aura server-side auth (must be before catch-all)
   app.get("/api/auth/session", async (req, res) => {
     const internalSecret = req.headers["x-internal-secret"];

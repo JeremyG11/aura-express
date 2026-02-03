@@ -165,10 +165,16 @@ var auth = (0, import_better_auth.betterAuth)({
     provider: "mongodb"
   }),
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: ["http://localhost:3000"],
+  trustedOrigins: [
+    "http://localhost:3000",
+    "http://localhost:7272",
+    "https://node-socket-io-hxb4.onrender.com",
+    process.env.FRONTEND_URL || ""
+  ].filter(Boolean),
   emailVerification: {
     sendOnSignUp: true,
     expiresIn: 60 * 60,
+    //
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       const link = new URL(url);
@@ -240,7 +246,8 @@ var auth = (0, import_better_auth.betterAuth)({
   advanced: {
     database: {
       generateId: false
-    }
+    },
+    crossOrigin: true
   },
   socialProviders: {
     google: {
@@ -1649,6 +1656,12 @@ var channels_default = router8;
 
 // src/config/routes.ts
 function setupRoutes(app2) {
+  app2.get("/", (req, res) => {
+    res.json({
+      message: "Lively Backend API is running",
+      documentation: "/health"
+    });
+  });
   app2.get("/api/auth/session", async (req, res) => {
     const internalSecret = req.headers["x-internal-secret"];
     if (internalSecret !== process.env.SERVER_INTERNAL_SECRET) {
