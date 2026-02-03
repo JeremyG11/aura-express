@@ -14,10 +14,13 @@ import { sendEmailAction } from "@/email/email";
 import { hashPassword, verifyPassword } from "@/libs/argon2";
 
 export const auth = betterAuth({
+  trustProxy: true,
   database: prismaAdapter(prisma, {
     provider: "mongodb",
   }),
   secret: process.env.BETTER_AUTH_SECRET,
+  baseURL:
+    process.env.BETTER_AUTH_URL || "https://node-socket-io-hxb4.onrender.com",
   trustedOrigins: [
     "http://localhost:3000",
     "http://localhost:7272",
@@ -95,6 +98,10 @@ export const auth = betterAuth({
       enabled: true,
       maxAge: 5 * 60,
     },
+    cookieOptions: {
+      secure: true,
+      sameSite: "none",
+    },
   },
   account: {
     accountLinking: {
@@ -107,6 +114,28 @@ export const auth = betterAuth({
       generateId: false,
     },
     crossOrigin: true,
+  },
+  secondaryStorage: {
+    get: async (key) => {
+      const value = await prisma.verification.findFirst({
+        where: { identifier: key },
+      });
+      return value?.value || null;
+    },
+    set: async (key, value, expiresAt) => {
+      await prisma.verification.create({
+        data: {
+          identifier: key,
+          value,
+          expiresAt: new Date(expiresAt),
+        },
+      });
+    },
+    delete: async (key) => {
+      await prisma.verification.deleteMany({
+        where: { identifier: key },
+      });
+    },
   },
   socialProviders: {
     google: {
