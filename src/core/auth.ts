@@ -22,8 +22,10 @@ export const auth = betterAuth({
     "http://localhost:3000",
     "http://localhost:7272",
     "https://node-socket-io-hxb4.onrender.com",
-    process.env.FRONTEND_URL || "",
-  ].filter(Boolean),
+    "https://aura-seven-lyart.vercel.app",
+    process.env.FRONTEND_URL,
+    process.env.BETTER_AUTH_URL,
+  ].filter((origin): origin is string => !!origin),
 
   emailVerification: {
     sendOnSignUp: true,
