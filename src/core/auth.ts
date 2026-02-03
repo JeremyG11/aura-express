@@ -20,7 +20,8 @@ export const auth = betterAuth({
   }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL:
-    process.env.BETTER_AUTH_URL || "https://node-socket-io-hxb4.onrender.com",
+    process.env.BETTER_AUTH_URL ||
+    "https://node-socket-io-hxb4.onrender.com/api/auth",
   trustedOrigins: [
     "http://localhost:3000",
     "http://localhost:7272",
