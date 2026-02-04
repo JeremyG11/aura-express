@@ -135,7 +135,7 @@ async function verifyPassword(data) {
 // src/core/auth.ts
 var auth = betterAuth({
   appName: "Aura",
-  basePath: "",
+  basePath: "/api/auth",
   trustProxy: true,
   database: prismaAdapter(prisma, {
     provider: "mongodb"
