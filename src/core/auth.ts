@@ -14,10 +14,13 @@ import { sendEmailAction } from "@/email/email";
 import { hashPassword, verifyPassword } from "@/libs/argon2";
 
 export const auth = betterAuth({
+  appName:"Aura",
+  basePath:"",
   trustProxy: true,
   database: prismaAdapter(prisma, {
     provider: "mongodb",
   }),
+  debug: true,
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL:
     process.env.BETTER_AUTH_URL || "https://node-socket-io-hxb4.onrender.com",
@@ -99,7 +102,7 @@ export const auth = betterAuth({
       maxAge: 5 * 60,
     },
   },
-  
+
   account: {
     skipStateCookieCheck: true,
     accountLinking: {

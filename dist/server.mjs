@@ -133,10 +133,13 @@ async function verifyPassword(data) {
 
 // src/core/auth.ts
 var auth = betterAuth({
+  appName: "Aura",
+  basePath: "",
   trustProxy: true,
   database: prismaAdapter(prisma, {
     provider: "mongodb"
   }),
+  debug: true,
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL || "https://node-socket-io-hxb4.onrender.com",
   trustedOrigins: [
