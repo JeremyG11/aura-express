@@ -1,4 +1,4 @@
-import { Application } from "express";
+import express, { Application } from "express";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "@/core/auth";
 import { authMiddleware } from "@/middlewares/authMiddleware";
@@ -54,6 +54,8 @@ export function setupRoutes(app: Application): void {
   // Apply global auth middleware from here onwards
   app.use(authMiddleware);
 
+    app.use(express.json());
+  
   // Protected Routes
   app.use("/api/messages", messageRoutes);
   app.use("/api/conversations", conversationsRoutes);
