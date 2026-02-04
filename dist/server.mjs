@@ -210,13 +210,10 @@ var auth = betterAuth({
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60
-    },
-    cookieOptions: {
-      secure: true,
-      sameSite: "none"
     }
   },
   account: {
+    skipStateCookieCheck: true,
     accountLinking: {
       enabled: true,
       trustedProviders: ["google", "github"]
@@ -226,16 +223,22 @@ var auth = betterAuth({
     database: {
       generateId: false
     },
-    crossOrigin: true
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true
+    },
+    useSecureCookies: true
   },
   secondaryStorage: {
     get: async (key) => {
       const value = await prisma.verification.findUnique({
         where: { identifier: key }
       });
+      console.log(`[SecondaryStorage] GET key=${key} found=${!!value}`);
       return value?.value || null;
     },
     set: async (key, value, expiresAt) => {
+      console.log(`[SecondaryStorage] SET key=${key} expires=${expiresAt}`);
       await prisma.verification.upsert({
         where: { identifier: key },
         create: {
@@ -250,6 +253,7 @@ var auth = betterAuth({
       });
     },
     delete: async (key) => {
+      console.log(`[SecondaryStorage] DELETE key=${key}`);
       await prisma.verification.deleteMany({
         where: { identifier: key }
       });

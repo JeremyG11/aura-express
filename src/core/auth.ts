@@ -98,10 +98,6 @@ export const auth = betterAuth({
       enabled: true,
       maxAge: 5 * 60,
     },
-    cookieOptions: {
-      secure: true,
-      sameSite: "none",
-    },
   },
   account: {
     skipStateCookieCheck: true,
@@ -110,16 +106,18 @@ export const auth = betterAuth({
       trustedProviders: ["google", "github"],
     },
   },
+  
   advanced: {
     database: {
       generateId: false,
     },
-    crossOrigin: true,
     defaultCookieAttributes: {
       sameSite: "none",
       secure: true,
     },
+    useSecureCookies: true,
   },
+
   secondaryStorage: {
     get: async (key) => {
       const value = await prisma.verification.findUnique({
