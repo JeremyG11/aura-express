@@ -32,7 +32,7 @@ export const auth = betterAuth({
 
   emailVerification: {
     sendOnSignUp: true,
-    expiresIn: 60 * 60, //
+    expiresIn: 60 * 60,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       const link = new URL(url);
@@ -104,6 +104,7 @@ export const auth = betterAuth({
     },
   },
   account: {
+    skipStateCookieCheck: true,
     accountLinking: {
       enabled: true,
       trustedProviders: ["google", "github"],
@@ -120,9 +121,11 @@ export const auth = betterAuth({
       const value = await prisma.verification.findUnique({
         where: { identifier: key },
       });
+      console.log(`[SecondaryStorage] GET key=${key} found=${!!value}`);
       return value?.value || null;
     },
     set: async (key, value, expiresAt) => {
+      console.log(`[SecondaryStorage] SET key=${key} expires=${expiresAt}`);
       await prisma.verification.upsert({
         where: { identifier: key },
         create: {
@@ -137,6 +140,7 @@ export const auth = betterAuth({
       });
     },
     delete: async (key) => {
+      console.log(`[SecondaryStorage] DELETE key=${key}`);
       await prisma.verification.deleteMany({
         where: { identifier: key },
       });
