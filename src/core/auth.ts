@@ -115,6 +115,10 @@ export const auth = betterAuth({
       generateId: false,
     },
     crossOrigin: true,
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+    },
   },
   secondaryStorage: {
     get: async (key) => {
