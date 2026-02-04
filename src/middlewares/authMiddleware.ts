@@ -7,11 +7,17 @@ export const authMiddleware = async (
   res: Response,
   next: NextFunction,
 ) => {
+  console.log(
+    `[AuthMiddleware] ${req.method} ${req.url} - Checking for session...`,
+  );
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(req.headers),
   });
 
-  console.log("[Auth] Session result:", session ? "FOUND" : "NULL");
+  console.log(
+    "[AuthMiddleware] Session lookup result:",
+    session ? `FOUND (User: ${session.user.email})` : "NO SESSION FOUND",
+  );
   if (session) {
     res.locals.userId = session.user.id;
     res.locals.user = session.user;

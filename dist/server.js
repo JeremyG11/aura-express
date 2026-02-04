@@ -347,10 +347,16 @@ var auth = (0, import_better_auth.betterAuth)({
 // src/middlewares/authMiddleware.ts
 var import_node = require("better-auth/node");
 var authMiddleware = async (req, res, next) => {
+  console.log(
+    `[AuthMiddleware] ${req.method} ${req.url} - Checking for session...`
+  );
   const session = await auth.api.getSession({
     headers: (0, import_node.fromNodeHeaders)(req.headers)
   });
-  console.log("[Auth] Session result:", session ? "FOUND" : "NULL");
+  console.log(
+    "[AuthMiddleware] Session lookup result:",
+    session ? `FOUND (User: ${session.user.email})` : "NO SESSION FOUND"
+  );
   if (session) {
     res.locals.userId = session.user.id;
     res.locals.user = session.user;
@@ -1014,7 +1020,14 @@ var getConversations = async (req, res) => {
         members: true
       }
     });
+    console.log(
+      `[ConversationController] Profile lookup for userId=${userId}:`,
+      profile ? "FOUND" : "NOT FOUND"
+    );
     if (!profile) {
+      console.warn(
+        `[ConversationController] No profile found for userId=${userId} in database.`
+      );
       return ApiResponse.error(res, "Profile not found", 404);
     }
     let memberIds = [];

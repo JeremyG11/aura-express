@@ -21,7 +21,15 @@ export const getConversations = async (req: Request, res: Response) => {
       },
     });
 
+    console.log(
+      `[ConversationController] Profile lookup for userId=${userId}:`,
+      profile ? "FOUND" : "NOT FOUND",
+    );
+
     if (!profile) {
+      console.warn(
+        `[ConversationController] No profile found for userId=${userId} in database.`,
+      );
       return ApiResponse.error(res, "Profile not found", 404);
     }
 
