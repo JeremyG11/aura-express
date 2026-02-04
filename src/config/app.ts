@@ -17,7 +17,6 @@ export function createApp(): Application {
   app.set("trust proxy", 1);
 
   // Basic middleware
-  app.use(express.json());
   app.use(cookieParser());
 
   // CORS configuration
@@ -43,8 +42,8 @@ export function createApp(): Application {
 
   // Rate limiting to prevent DoS/Brute-force
   const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // Increased limit for development/active usage
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
     standardHeaders: true,
     legacyHeaders: false,
   });

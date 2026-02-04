@@ -60,6 +60,7 @@ if (process.env.NODE_ENV !== "production") {
 var logger_default = logger;
 
 // src/config/routes.ts
+var import_express9 = __toESM(require("express"));
 var import_node2 = require("better-auth/node");
 
 // src/core/auth.ts
@@ -162,7 +163,7 @@ async function verifyPassword(data) {
 // src/core/auth.ts
 var auth = (0, import_better_auth.betterAuth)({
   appName: "Aura",
-  basePath: "",
+  basePath: "/api/auth",
   trustProxy: true,
   database: (0, import_prisma.prismaAdapter)(prisma, {
     provider: "mongodb"
@@ -1723,6 +1724,7 @@ function setupRoutes(app2) {
     });
   });
   app2.use(authMiddleware);
+  app2.use(import_express9.default.json());
   app2.use("/api/messages", messages_default);
   app2.use("/api/conversations", conversations_default);
   app2.use("/api/link-preview", link_preview_default);
@@ -2053,15 +2055,14 @@ var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
 };
 
 // src/config/app.ts
-var import_express9 = __toESM(require("express"));
+var import_express10 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_cookie_parser = __toESM(require("cookie-parser"));
 var import_express_rate_limit = require("express-rate-limit");
 var allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["http://localhost:3000"];
 function createApp() {
-  const app2 = (0, import_express9.default)();
+  const app2 = (0, import_express10.default)();
   app2.set("trust proxy", 1);
-  app2.use(import_express9.default.json());
   app2.use((0, import_cookie_parser.default)());
   app2.use(
     (0, import_cors.default)({
@@ -2082,9 +2083,7 @@ function createApp() {
   });
   const limiter = (0, import_express_rate_limit.rateLimit)({
     windowMs: 15 * 60 * 1e3,
-    // 15 minutes
     max: 1e3,
-    // Increased limit for development/active usage
     standardHeaders: true,
     legacyHeaders: false
   });

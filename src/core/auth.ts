@@ -14,8 +14,8 @@ import { sendEmailAction } from "@/email/email";
 import { hashPassword, verifyPassword } from "@/libs/argon2";
 
 export const auth = betterAuth({
-  appName:"Aura",
-  basePath:"",
+  appName: "Aura",
+  basePath: "/api/auth",
   trustProxy: true,
   database: prismaAdapter(prisma, {
     provider: "mongodb",
