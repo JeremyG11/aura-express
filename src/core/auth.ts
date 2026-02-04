@@ -99,6 +99,7 @@ export const auth = betterAuth({
       maxAge: 5 * 60,
     },
   },
+  
   account: {
     skipStateCookieCheck: true,
     accountLinking: {
@@ -106,7 +107,7 @@ export const auth = betterAuth({
       trustedProviders: ["google", "github"],
     },
   },
-  
+
   advanced: {
     database: {
       generateId: false,
