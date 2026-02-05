@@ -1,104 +1,76 @@
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
 // src/server.ts
-var server_exports = {};
-__export(server_exports, {
-  app: () => app
-});
-module.exports = __toCommonJS(server_exports);
-var import_register = require("module-alias/register");
-var import_dotenv = __toESM(require("dotenv"));
-var import_http = __toESM(require("http"));
+import "module-alias/register";
+import dotenv from "dotenv";
+import http from "http";
 
 // src/core/logger.ts
-var import_winston = __toESM(require("winston"));
-var logger = import_winston.default.createLogger({
+import winston from "winston";
+var logger = winston.createLogger({
   level: "info",
-  format: import_winston.default.format.json(),
+  format: winston.format.json(),
   defaultMeta: { service: "user-service" },
   transports: []
 });
 if (process.env.NODE_ENV !== "production") {
   logger.add(
-    new import_winston.default.transports.Console({
-      format: import_winston.default.format.simple()
+    new winston.transports.Console({
+      format: winston.format.simple()
     })
   );
 } else {
   logger.add(
-    new import_winston.default.transports.Console({
-      format: import_winston.default.format.json()
+    new winston.transports.Console({
+      format: winston.format.json()
     })
   );
 }
 var logger_default = logger;
 
 // src/config/routes.ts
-var import_express9 = __toESM(require("express"));
-var import_node2 = require("better-auth/node");
+import express from "express";
+import { toNodeHandler } from "better-auth/node";
 
 // src/core/auth.ts
-var import_better_auth = require("better-auth");
-var import_prisma = require("better-auth/adapters/prisma");
-var import_plugins = require("better-auth/plugins");
-var import_passkey = require("@better-auth/passkey");
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import {
+  admin,
+  customSession,
+  magicLink,
+  twoFactor
+} from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 
 // src/core/db.ts
-var import_client = require("@prisma/client");
+import { PrismaClient } from "@prisma/client";
 var prismaClientSingleton = () => {
-  return new import_client.PrismaClient();
+  return new PrismaClient();
 };
 var globalForPrisma = globalThis;
 var prisma = globalForPrisma.prisma ?? prismaClientSingleton();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 // src/utils/permissions.ts
-var import_access = require("better-auth/plugins/access");
-var import_access2 = require("better-auth/plugins/admin/access");
+import { createAccessControl } from "better-auth/plugins/access";
+import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
 var statements = {
-  ...import_access2.defaultStatements,
+  ...defaultStatements,
   posts: ["create", "read", "update", "delete", "update:own", "delete:own"]
 };
-var ac = (0, import_access.createAccessControl)(statements);
+var ac = createAccessControl(statements);
 var roles = {
   USER: ac.newRole({
     posts: ["create", "read", "update:own", "delete:own"]
   }),
   ADMIN: ac.newRole({
     posts: ["create", "read", "update", "delete", "update:own", "delete:own"],
-    ...import_access2.adminAc.statements
+    ...adminAc.statements
   })
 };
 
 // src/email/nodemailer.ts
-var import_nodemailer = __toESM(require("nodemailer"));
-var transporter = import_nodemailer.default.createTransport({
+import nodemailer from "nodemailer";
+var transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 465,
   secure: true,
@@ -143,7 +115,7 @@ async function sendEmailAction({
 }
 
 // src/libs/argon2.ts
-var import_argon2 = require("@node-rs/argon2");
+import { hash, verify } from "@node-rs/argon2";
 var opts = {
   memoryCost: 19456,
   timeCost: 2,
@@ -151,21 +123,21 @@ var opts = {
   parallelism: 1
 };
 async function hashPassword(password) {
-  const result = await (0, import_argon2.hash)(password, opts);
+  const result = await hash(password, opts);
   return result;
 }
 async function verifyPassword(data) {
   const { password, hash: hashedPassword } = data;
-  const result = await (0, import_argon2.verify)(hashedPassword, password, opts);
+  const result = await verify(hashedPassword, password, opts);
   return result;
 }
 
 // src/core/auth.ts
-var auth = (0, import_better_auth.betterAuth)({
+var auth = betterAuth({
   appName: "Aura",
   basePath: "/api/auth",
   trustProxy: true,
-  database: (0, import_prisma.prismaAdapter)(prisma, {
+  database: prismaAdapter(prisma, {
     provider: "mongodb"
   }),
   debug: true,
@@ -302,13 +274,13 @@ var auth = (0, import_better_auth.betterAuth)({
     }
   },
   plugins: [
-    (0, import_plugins.admin)({
+    admin({
       defaultRole: "USER",
       adminRoles: ["ADMIN"],
       ac,
       roles
     }),
-    (0, import_plugins.magicLink)({
+    magicLink({
       sendMagicLink: async ({ email, url }) => {
         await sendEmailAction({
           to: email,
@@ -320,11 +292,11 @@ var auth = (0, import_better_auth.betterAuth)({
         });
       }
     }),
-    (0, import_plugins.twoFactor)({
+    twoFactor({
       otpOptions: {}
     }),
-    (0, import_passkey.passkey)(),
-    (0, import_plugins.customSession)(async ({ user, session }) => {
+    passkey(),
+    customSession(async ({ user, session }) => {
       return {
         session: {
           expiresAt: session.expiresAt,
@@ -345,13 +317,13 @@ var auth = (0, import_better_auth.betterAuth)({
 });
 
 // src/middlewares/authMiddleware.ts
-var import_node = require("better-auth/node");
+import { fromNodeHeaders } from "better-auth/node";
 var authMiddleware = async (req, res, next) => {
   console.log(
     `[AuthMiddleware] ${req.method} ${req.url} - Checking for session...`
   );
   const session = await auth.api.getSession({
-    headers: (0, import_node.fromNodeHeaders)(req.headers)
+    headers: fromNodeHeaders(req.headers)
   });
   console.log(
     "[AuthMiddleware] Session lookup result:",
@@ -455,7 +427,7 @@ var errorHandler = (err, req, res, next) => {
 };
 
 // src/routes/messages.ts
-var import_express = require("express");
+import { Router } from "express";
 
 // src/services/member.ts
 var MemberService = class {
@@ -496,8 +468,8 @@ var MemberService = class {
 };
 
 // src/core/events.ts
-var import_events = require("events");
-var events = new import_events.EventEmitter();
+import { EventEmitter } from "events";
+var events = new EventEmitter();
 var MESSAGE_EVENTS = {
   CREATED: "message:created",
   UPDATED: "message:updated",
@@ -927,67 +899,67 @@ var validator = (schema) => (req, res, next) => {
 var validationMiddleware_default = validator;
 
 // src/schemas/message.schema.ts
-var import_zod = require("zod");
-var createChannelMessageSchema = import_zod.z.object({
-  body: import_zod.z.object({
-    content: import_zod.z.string().min(1).max(5e3),
-    fileUrl: import_zod.z.string().url().optional().nullable(),
-    isEncrypted: import_zod.z.boolean().optional()
+import { z } from "zod";
+var createChannelMessageSchema = z.object({
+  body: z.object({
+    content: z.string().min(1).max(5e3),
+    fileUrl: z.string().url().optional().nullable(),
+    isEncrypted: z.boolean().optional()
   }),
-  query: import_zod.z.object({
-    serverId: import_zod.z.string().min(1),
-    channelId: import_zod.z.string().min(1)
+  query: z.object({
+    serverId: z.string().min(1),
+    channelId: z.string().min(1)
   })
 });
-var createDirectMessageSchema = import_zod.z.object({
-  body: import_zod.z.object({
-    content: import_zod.z.string().min(1).max(5e3),
-    fileUrl: import_zod.z.string().url().optional().nullable(),
-    isEncrypted: import_zod.z.boolean().optional()
+var createDirectMessageSchema = z.object({
+  body: z.object({
+    content: z.string().min(1).max(5e3),
+    fileUrl: z.string().url().optional().nullable(),
+    isEncrypted: z.boolean().optional()
   }),
-  query: import_zod.z.object({
-    conversationId: import_zod.z.string().min(1)
+  query: z.object({
+    conversationId: z.string().min(1)
   })
 });
-var updateMessageSchema = import_zod.z.object({
-  params: import_zod.z.object({
-    messageId: import_zod.z.string().min(1)
+var updateMessageSchema = z.object({
+  params: z.object({
+    messageId: z.string().min(1)
   }),
-  body: import_zod.z.object({
-    content: import_zod.z.string().min(1).max(5e3)
+  body: z.object({
+    content: z.string().min(1).max(5e3)
   }),
-  query: import_zod.z.object({
-    serverId: import_zod.z.string().optional(),
-    channelId: import_zod.z.string().optional(),
-    conversationId: import_zod.z.string().optional()
+  query: z.object({
+    serverId: z.string().optional(),
+    channelId: z.string().optional(),
+    conversationId: z.string().optional()
   })
 });
-var deleteMessageSchema = import_zod.z.object({
-  params: import_zod.z.object({
-    messageId: import_zod.z.string().min(1)
+var deleteMessageSchema = z.object({
+  params: z.object({
+    messageId: z.string().min(1)
   }),
-  query: import_zod.z.object({
-    serverId: import_zod.z.string().optional(),
-    channelId: import_zod.z.string().optional(),
-    conversationId: import_zod.z.string().optional()
+  query: z.object({
+    serverId: z.string().optional(),
+    channelId: z.string().optional(),
+    conversationId: z.string().optional()
   })
 });
-var conversationSchema = import_zod.z.object({
-  query: import_zod.z.object({
-    receiverId: import_zod.z.string().min(1)
+var conversationSchema = z.object({
+  query: z.object({
+    receiverId: z.string().min(1)
   })
 });
-var sendMessageSchema = import_zod.z.object({
-  body: import_zod.z.object({
-    message: import_zod.z.string().min(1)
+var sendMessageSchema = z.object({
+  body: z.object({
+    message: z.string().min(1)
   }),
-  query: import_zod.z.object({
-    receiverId: import_zod.z.string().min(1)
+  query: z.object({
+    receiverId: z.string().min(1)
   })
 });
 
 // src/routes/messages.ts
-var router = (0, import_express.Router)();
+var router = Router();
 router.post(
   "/channel",
   validationMiddleware_default(createChannelMessageSchema),
@@ -1005,7 +977,7 @@ router.get("/", getMessages);
 var messages_default = router;
 
 // src/routes/conversations.ts
-var import_express2 = require("express");
+import { Router as Router2 } from "express";
 
 // src/controllers/conversation.ts
 var getConversations = async (req, res) => {
@@ -1093,15 +1065,15 @@ var getConversations = async (req, res) => {
 };
 
 // src/routes/conversations.ts
-var router2 = (0, import_express2.Router)();
+var router2 = Router2();
 router2.get("/", getConversations);
 var conversations_default = router2;
 
 // src/routes/link-preview.ts
-var import_express3 = require("express");
+import { Router as Router3 } from "express";
 
 // src/controllers/link-preview.ts
-var import_axios = __toESM(require("axios"));
+import axios from "axios";
 var getLinkPreview = async (req, res) => {
   try {
     const { url } = req.query;
@@ -1121,7 +1093,7 @@ var getLinkPreview = async (req, res) => {
     }
     logger_default.info(`[LinkPreview] Fetching from OpenGraph.io for: ${url}`);
     const opengraphUrl = `https://opengraph.io/api/1.1/site/${encodeURIComponent(url)}?app_id=${apiKey}`;
-    const response = await import_axios.default.get(opengraphUrl, { timeout: 1e4 });
+    const response = await axios.get(opengraphUrl, { timeout: 1e4 });
     const data = response.data;
     if (data.error) {
       logger_default.error(`[OpenGraph.io] Error: ${data.error.message}`);
@@ -1147,7 +1119,7 @@ var getLinkPreview = async (req, res) => {
       "Link preview fetched"
     );
   } catch (error) {
-    if (import_axios.default.isAxiosError(error) && error.response) {
+    if (axios.isAxiosError(error) && error.response) {
       logger_default.error(
         `[LinkPreview] OpenGraph.io returned ${error.response.status}: ${JSON.stringify(error.response.data)}`
       );
@@ -1163,12 +1135,12 @@ var getLinkPreview = async (req, res) => {
 };
 
 // src/routes/link-preview.ts
-var router3 = (0, import_express3.Router)();
+var router3 = Router3();
 router3.get("/", getLinkPreview);
 var link_preview_default = router3;
 
 // src/routes/threads.ts
-var import_express4 = require("express");
+import { Router as Router4 } from "express";
 
 // src/controllers/thread.ts
 var getChannelThreadMetadata = async (req, res) => {
@@ -1261,13 +1233,13 @@ var getDirectThreadMetadata = async (req, res) => {
 };
 
 // src/routes/threads.ts
-var router4 = (0, import_express4.Router)();
+var router4 = Router4();
 router4.get("/channel/:messageId", getChannelThreadMetadata);
 router4.get("/direct/:messageId", getDirectThreadMetadata);
 var threads_default = router4;
 
 // src/routes/notifications.ts
-var import_express5 = require("express");
+import { Router as Router5 } from "express";
 
 // src/services/profile.ts
 var getProfileByUserId = async (userId) => {
@@ -1425,7 +1397,7 @@ var deleteAllNotifications = async (req, res) => {
 };
 
 // src/routes/notifications.ts
-var router5 = (0, import_express5.Router)();
+var router5 = Router5();
 router5.use(authMiddleware);
 router5.get("/", getNotifications);
 router5.get("/unread-count", getUnreadCount);
@@ -1436,7 +1408,7 @@ router5.delete("/delete-all", deleteAllNotifications);
 var notifications_default = router5;
 
 // src/routes/reactions.ts
-var import_express6 = require("express");
+import { Router as Router6 } from "express";
 
 // src/services/reaction.ts
 var ReactionService = class {
@@ -1614,7 +1586,7 @@ var getMessageReactions = async (req, res) => {
 };
 
 // src/routes/reactions.ts
-var router6 = (0, import_express6.Router)();
+var router6 = Router6();
 router6.get("/message/:messageId", getMessageReactions);
 router6.use(authMiddleware);
 router6.post("/", addReaction);
@@ -1623,7 +1595,7 @@ router6.get("/message/:messageId", getMessageReactions);
 var reactions_default = router6;
 
 // src/routes/members.ts
-var import_express7 = require("express");
+import { Router as Router7 } from "express";
 
 // src/controllers/member.ts
 var getServerMembers = async (req, res) => {
@@ -1663,12 +1635,12 @@ var getServerMembers = async (req, res) => {
 };
 
 // src/routes/members.ts
-var router7 = (0, import_express7.Router)();
+var router7 = Router7();
 router7.get("/server/:serverId", getServerMembers);
 var members_default = router7;
 
 // src/routes/channels.ts
-var import_express8 = require("express");
+import { Router as Router8 } from "express";
 
 // src/controllers/channel.ts
 var getServerChannels = async (req, res) => {
@@ -1705,7 +1677,7 @@ var getServerChannels = async (req, res) => {
 };
 
 // src/routes/channels.ts
-var router8 = (0, import_express8.Router)();
+var router8 = Router8();
 router8.get("/server/:serverId", getServerChannels);
 var channels_default = router8;
 
@@ -1728,7 +1700,7 @@ function setupRoutes(app2) {
     });
     res.json({ data: session });
   });
-  app2.all("/api/auth/*", (0, import_node2.toNodeHandler)(auth));
+  app2.all("/api/auth/*", toNodeHandler(auth));
   app2.get("/health", (req, res) => {
     res.json({
       status: "ok",
@@ -1737,7 +1709,7 @@ function setupRoutes(app2) {
     });
   });
   app2.use(authMiddleware);
-  app2.use(import_express9.default.json());
+  app2.use(express.json());
   app2.use("/api/messages", messages_default);
   app2.use("/api/conversations", conversations_default);
   app2.use("/api/link-preview", link_preview_default);
@@ -1910,11 +1882,11 @@ events.on(REACTION_EVENTS.REMOVED, async ({ reaction }) => {
 });
 
 // src/libs/socket.ts
-var import_socket3 = require("socket.io");
-var import_node3 = require("better-auth/node");
+import { Server } from "socket.io";
+import { fromNodeHeaders as fromNodeHeaders2 } from "better-auth/node";
 var io;
 var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
-  io = new import_socket3.Server(httpServer2, {
+  io = new Server(httpServer2, {
     cors: {
       origin: allowedOrigins2,
       credentials: true,
@@ -1928,7 +1900,7 @@ var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
   io.use(async (socket, next) => {
     logger_default.info("[Socket.io] New connection attempt");
     const session = await auth.api.getSession({
-      headers: (0, import_node3.fromNodeHeaders)(socket.handshake.headers)
+      headers: fromNodeHeaders2(socket.handshake.headers)
     });
     if (!session) {
       logger_default.warn("[Socket.io] Unauthenticated connection attempt rejected");
@@ -2068,17 +2040,17 @@ var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
 };
 
 // src/config/app.ts
-var import_express10 = __toESM(require("express"));
-var import_cors = __toESM(require("cors"));
-var import_cookie_parser = __toESM(require("cookie-parser"));
-var import_express_rate_limit = require("express-rate-limit");
+import express2 from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import { rateLimit } from "express-rate-limit";
 var allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["http://localhost:3000"];
 function createApp() {
-  const app2 = (0, import_express10.default)();
+  const app2 = express2();
   app2.set("trust proxy", 1);
-  app2.use((0, import_cookie_parser.default)());
+  app2.use(cookieParser());
   app2.use(
-    (0, import_cors.default)({
+    cors({
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         if (allowedOrigins.indexOf(origin) !== -1) {
@@ -2094,7 +2066,7 @@ function createApp() {
     logger_default.info(`[Request] ${req.method} ${req.url}`);
     next();
   });
-  const limiter = (0, import_express_rate_limit.rateLimit)({
+  const limiter = rateLimit({
     windowMs: 15 * 60 * 1e3,
     max: 1e3,
     standardHeaders: true,
@@ -2141,11 +2113,11 @@ function serverShutdown(httpServer2) {
 }
 
 // src/server.ts
-import_dotenv.default.config();
+dotenv.config();
 var port = process.env.PORT || 7272;
 var app = createApp();
 setupRoutes(app);
-var server = import_http.default.createServer(app);
+var server = http.createServer(app);
 initializeSocket(server, allowedOrigins, app);
 var httpServer;
 if (process.env.NODE_ENV !== "test") {
@@ -2155,8 +2127,7 @@ if (process.env.NODE_ENV !== "test") {
   });
 }
 serverShutdown(httpServer);
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
+export {
   app
-});
+};
 //# sourceMappingURL=server.js.map
