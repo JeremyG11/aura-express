@@ -4,12 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsup --watch --onSuccess \"node dist/server.js\"",
-    "prebuild": "mkdir -p prisma && (cp ../aura/prisma/schema.prisma prisma/schema.prisma 2>/dev/null || echo 'Using existing schema')",
-    "build": "prisma generate && tsup",
+    "sync-schema": "ts-node-esm scripts/sync-schema.ts",
+    "dev": "pnpm run sync-schema && tsup --watch --onSuccess \"node dist/server.js\"",
+    "prebuild": "pnpm run sync-schema",
+    "build": "pnpm run sync-schema && prisma generate && tsup",
     "start": "node dist/server.js",
-    "postinstall": "prisma generate --schema=../aura/prisma/schema.prisma || prisma generate",
-    "db:generate": "prisma generate --schema=../aura/prisma/schema.prisma",
+    "postinstall": "pnpm run sync-schema && prisma generate",
+    "db:generate": "pnpm run sync-schema && prisma generate",
     "test": "vitest"
   },
   "keywords": [],
