@@ -55,6 +55,7 @@ model User {
 
   twoFactorEnabled Boolean?
   isOnline         Boolean   @default(false)
+  lastSeenAt       DateTime?
   
   profile       Profile?
 
