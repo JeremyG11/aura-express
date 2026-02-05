@@ -1,15 +1,12 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
 import logger from "../src/core/logger";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const LOCAL_AURA_PATH = path.join(__dirname, "../../aura/prisma/schema.prisma");
-const GITHUB_SCHEMA_URL =
-  "https://raw.githubusercontent.com/JeremyG11/aura/main/prisma/schema.prisma";
 const TARGET_PATH = path.join(__dirname, "../prisma/schema.prisma");
 
 async function sync() {
@@ -18,30 +15,20 @@ async function sync() {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  // 1. Try local copy first
+  // Only sync if local aura is found
   if (fs.existsSync(LOCAL_AURA_PATH)) {
-    logger.info("🔄 Syncing Prisma schema from local aura project...");
+    logger.info("🔄 Local aura found. Syncing Prisma schema...");
     try {
       fs.copyFileSync(LOCAL_AURA_PATH, TARGET_PATH);
-      logger.info("✅ Schema synced from local.");
-      return;
+      logger.info("✅ Schema synced from local aura project.");
     } catch (error: any) {
-      logger.warn(
-        `⚠️ Failed to copy local schema: ${error.message}. Falling back to GitHub.`,
-      );
+      logger.error(`❌ Failed to copy local schema: ${error.message}`);
+      // Don't exit with error here, as we might still have a valid schema in the repo
     }
-  }
-
-  // 2. Fallback to GitHub
-  logger.info(
-    "🌐 Local aura not found or copy failed. Fetching schema from GitHub...",
-  );
-  try {
-    execSync(`curl -fsSL ${GITHUB_SCHEMA_URL} -o ${TARGET_PATH}`);
-    logger.info("✅ Schema fetched from GitHub.");
-  } catch (error: any) {
-    logger.error(`❌ Failed to fetch schema from GitHub: ${error.message}`);
-    process.exit(1);
+  } else {
+    logger.info(
+      "ℹ️ Local aura project not found. Using existing schema in repository.",
+    );
   }
 }
 

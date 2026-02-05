@@ -7,10 +7,10 @@
   "scripts": {
     "sync-schema": "tsx scripts/sync-schema.ts",
     "dev": "pnpm run sync-schema && tsup --watch --onSuccess \"node dist/server.js\"",
-    "prebuild": "pnpm run sync-schema",
-    "build": "pnpm run sync-schema && prisma generate && tsup",
+    "prebuild": "echo 'Skipping sync during prebuild'",
+    "build": "prisma generate && tsup",
     "start": "node dist/server.js",
-    "postinstall": "pnpm run sync-schema && prisma generate",
+    "postinstall": "prisma generate",
     "db:generate": "pnpm run sync-schema && prisma generate",
     "typecheck": "tsc --noEmit",
     "test": "vitest"
