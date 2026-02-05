@@ -1,5 +1,4 @@
 // src/server.ts
-import "module-alias/register";
 import dotenv from "dotenv";
 import http from "http";
 

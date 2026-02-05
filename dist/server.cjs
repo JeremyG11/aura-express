@@ -32,7 +32,6 @@ __export(server_exports, {
   app: () => app
 });
 module.exports = __toCommonJS(server_exports);
-var import_register = require("module-alias/register");
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_http = __toESM(require("http"), 1);
 
