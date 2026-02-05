@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
@@ -12,5 +12,5 @@
     "noImplicitAny": true,
     "skipLibCheck": true
   },
-  "include": ["./src/**/*", "./index.d.ts", "src/types.ts"]
+  "include": ["./src/**/*", "./index.d.ts", "src/types.ts", "./scripts/**/*"]
 }

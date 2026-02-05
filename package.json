@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "sync-schema": "ts-node-esm scripts/sync-schema.ts",
+    "sync-schema": "tsx scripts/sync-schema.ts",
     "dev": "pnpm run sync-schema && tsup --watch --onSuccess \"node dist/server.js\"",
     "prebuild": "pnpm run sync-schema",
     "build": "pnpm run sync-schema && prisma generate && tsup",
     "start": "node dist/server.js",
     "postinstall": "pnpm run sync-schema && prisma generate",
     "db:generate": "pnpm run sync-schema && prisma generate",
+    "typecheck": "tsc --noEmit",
     "test": "vitest"
   },
   "keywords": [],
@@ -26,6 +28,7 @@
     "supertest": "^7.2.2",
     "ts-node": "^10.9.1",
     "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.2.2",
     "vitest": "^4.0.18"
   },
