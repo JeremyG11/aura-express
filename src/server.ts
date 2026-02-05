@@ -1,4 +1,3 @@
-import "module-alias/register";
 import dotenv from "dotenv";
 import http from "http";
 import logger from "@/core/logger";
