@@ -417,7 +417,7 @@ var errorHandler = (err, req, res, next) => {
     message = err.message;
   }
   if (statusCode >= 500) {
-    console.error(
+    logger_default.error(
       `[Error] ${req.method} ${req.url} - Status: ${statusCode}`,
       err
     );
