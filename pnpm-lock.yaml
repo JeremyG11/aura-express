@@ -11,6 +11,9 @@ importers:
       '@better-auth/passkey':
         specifier: ^1.4.17
         version: 1.4.17(@better-auth/core@1.4.17(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@3.25.76))(jose@6.1.3)(kysely@0.28.10)(nanostores@1.1.0))(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-auth@1.4.17(@prisma/client@6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3))(mongodb@6.21.0)(prisma@6.19.0(typescript@5.9.3))(vitest@4.0.18(@types/node@20.19.30)(jiti@2.6.1)(tsx@4.21.0)))(better-call@1.1.8(zod@3.25.76))(nanostores@1.1.0)
+      '@better-auth/stripe':
+        specifier: ^1.4.18
+        version: 1.4.18(@better-auth/core@1.4.17(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@3.25.76))(jose@6.1.3)(kysely@0.28.10)(nanostores@1.1.0))(better-auth@1.4.17(@prisma/client@6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3))(mongodb@6.21.0)(prisma@6.19.0(typescript@5.9.3))(vitest@4.0.18(@types/node@20.19.30)(jiti@2.6.1)(tsx@4.21.0)))(stripe@20.3.1(@types/node@20.19.30))
       '@node-rs/argon2':
         specifier: ^2.0.2
         version: 2.0.2
@@ -71,6 +74,12 @@ importers:
       socket.io:
         specifier: ^4.7.2
         version: 4.8.3
+      stripe:
+        specifier: ^20.3.1
+        version: 20.3.1(@types/node@20.19.30)
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
       winston:
         specifier: ^3.19.0
         version: 3.19.0
@@ -90,6 +99,9 @@ importers:
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
+      '@types/uuid':
+        specifier: ^11.0.0
+        version: 11.0.0
       nodemon:
         specifier: ^3.0.1
         version: 3.1.11
@@ -277,6 +289,13 @@ packages:
       better-auth: 1.4.17
       better-call: 1.1.8
       nanostores: ^1.0.1
+
+  '@better-auth/stripe@1.4.18':
+    resolution: {integrity: sha512-T1vUPHEnzd3/gQH2e9BigfqcaOZ3W+jBVlfHpXZVGoat1oKFPtKnJ3OHmfU1MwSCjNSdIFllrN6U6DhsQlZoEQ==}
+    peerDependencies:
+      '@better-auth/core': 1.4.18
+      better-auth: 1.4.18
+      stripe: ^18 || ^19 || ^20
 
   '@better-auth/telemetry@1.4.17':
     resolution: {integrity: sha512-R1BC4e/bNjQbXu7lG6ubpgmsPj7IMqky5DvMlzAtnAJWJhh99pMh/n6w5gOHa0cqDZgEAuj75IPTxv+q3YiInA==}
@@ -1075,6 +1094,10 @@ packages:
 
   '@types/triple-beam@1.3.5':
     resolution: {integrity: sha512-6WaYesThRMCl19iryMYP7/x2OVgCtbIVflDGFpWnb9irXI3UjYE4AzmYuiUKY1AJstGijoY+MgUszMgRxIYTYw==}
+
+  '@types/uuid@11.0.0':
+    resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
+    deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
 
   '@types/webidl-conversions@7.0.3':
     resolution: {integrity: sha512-CiJJvcRtIgzadHCYXw7dqEnMNRjhGZlYK05Mj9OyktqV8uVT8fD2BFOB7S1uwBE3Kj2Z+4UyPmFw/Ixgw/LAlA==}
@@ -2113,6 +2136,15 @@ packages:
   string_decoder@1.3.0:
     resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
 
+  stripe@20.3.1:
+    resolution: {integrity: sha512-k990yOT5G5rhX3XluRPw5Y8RLdJDW4dzQ29wWT66piHrbnM2KyamJ1dKgPsw4HzGHRWjDiSSdcI2WdxQUPV3aQ==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   strnum@2.1.2:
     resolution: {integrity: sha512-l63NF9y/cLROq/yqKXSLtcMeeyOfnSQlfMSlzFt/K73oIaD8DGaQWd7Z34X9GPiKqP5rbSh84Hl4bOlLcjiSrQ==}
 
@@ -2264,6 +2296,10 @@ packages:
   utils-merge@1.0.1:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
+
+  uuid@13.0.0:
+    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
+    hasBin: true
 
   v8-compile-cache-lib@3.0.1:
     resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
@@ -2840,6 +2876,14 @@ snapshots:
       better-auth: 1.4.17(@prisma/client@6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3))(mongodb@6.21.0)(prisma@6.19.0(typescript@5.9.3))(vitest@4.0.18(@types/node@20.19.30)(jiti@2.6.1)(tsx@4.21.0))
       better-call: 1.1.8(zod@3.25.76)
       nanostores: 1.1.0
+      zod: 4.3.6
+
+  '@better-auth/stripe@1.4.18(@better-auth/core@1.4.17(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@3.25.76))(jose@6.1.3)(kysely@0.28.10)(nanostores@1.1.0))(better-auth@1.4.17(@prisma/client@6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3))(mongodb@6.21.0)(prisma@6.19.0(typescript@5.9.3))(vitest@4.0.18(@types/node@20.19.30)(jiti@2.6.1)(tsx@4.21.0)))(stripe@20.3.1(@types/node@20.19.30))':
+    dependencies:
+      '@better-auth/core': 1.4.17(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@3.25.76))(jose@6.1.3)(kysely@0.28.10)(nanostores@1.1.0)
+      better-auth: 1.4.17(@prisma/client@6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3))(mongodb@6.21.0)(prisma@6.19.0(typescript@5.9.3))(vitest@4.0.18(@types/node@20.19.30)(jiti@2.6.1)(tsx@4.21.0))
+      defu: 6.1.4
+      stripe: 20.3.1(@types/node@20.19.30)
       zod: 4.3.6
 
   '@better-auth/telemetry@1.4.17(@better-auth/core@1.4.17(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@3.25.76))(jose@6.1.3)(kysely@0.28.10)(nanostores@1.1.0))':
@@ -3693,6 +3737,10 @@ snapshots:
       '@types/superagent': 8.1.9
 
   '@types/triple-beam@1.3.5': {}
+
+  '@types/uuid@11.0.0':
+    dependencies:
+      uuid: 13.0.0
 
   '@types/webidl-conversions@7.0.3': {}
 
@@ -4735,6 +4783,10 @@ snapshots:
     dependencies:
       safe-buffer: 5.2.1
 
+  stripe@20.3.1(@types/node@20.19.30):
+    optionalDependencies:
+      '@types/node': 20.19.30
+
   strnum@2.1.2: {}
 
   sucrase@3.35.1:
@@ -4893,6 +4945,8 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   utils-merge@1.0.1: {}
+
+  uuid@13.0.0: {}
 
   v8-compile-cache-lib@3.0.1: {}
 

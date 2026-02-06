@@ -1,17 +1,13 @@
 import express, { Application } from "express";
 import { toNodeHandler } from "better-auth/node";
-import { auth } from "@/core/auth";
-import { authMiddleware } from "@/middlewares/authMiddleware";
-import { errorHandler } from "@/middlewares/errorHandler";
-import messageRoutes from "@/routes/messages";
-import conversationsRoutes from "@/routes/conversations";
-import linkPreviewRoutes from "@/routes/link-preview";
-import threadRoutes from "@/routes/threads";
-import notificationRoutes from "@/routes/notifications";
-import reactionRoutes from "@/routes/reactions";
-import membersRoutes from "@/routes/members";
-import channelRoutes from "@/routes/channels";
-import logger from "@/core/logger";
+import { auth } from "@/core/auth/config";
+import { authMiddleware } from "@/core/auth/middleware";
+import { errorHandler } from "@/shared/middlewares/errorHandler";
+import messagingRoutes from "@/core/messaging/routes";
+import serverRoutes from "@/core/servers/routes";
+import notificationRoutes from "@/core/notifications/routes";
+import userRoutes from "@/core/users/routes";
+import logger from "@/shared/core/logger";
 
 export function setupRoutes(app: Application): void {
   // Root route to avoid "Cannot GET /"
@@ -22,7 +18,6 @@ export function setupRoutes(app: Application): void {
     });
   });
 
-  // Session introspection endpoint for aura server-side auth (must be before catch-all)
   app.get("/api/auth/session", async (req, res) => {
     const internalSecret = req.headers["x-internal-secret"];
 
@@ -39,10 +34,8 @@ export function setupRoutes(app: Application): void {
     res.json({ data: session });
   });
 
-  // Better Auth route (catch-all, must be after specific routes)
   app.all("/api/auth/*", toNodeHandler(auth));
 
-  // Health check endpoint (Public)
   app.get("/health", (req, res) => {
     res.json({
       status: "ok",
@@ -51,21 +44,18 @@ export function setupRoutes(app: Application): void {
     });
   });
 
-  // Apply global auth middleware from here onwards
   app.use(authMiddleware);
 
-    app.use(express.json());
-  
-  // Protected Routes
-  app.use("/api/messages", messageRoutes);
-  app.use("/api/conversations", conversationsRoutes);
-  app.use("/api/link-preview", linkPreviewRoutes);
-  app.use("/api/threads", threadRoutes);
-  app.use("/api/notifications", notificationRoutes);
-  app.use("/api/reactions", reactionRoutes);
-  app.use("/api/members", membersRoutes);
-  app.use("/api/channels", channelRoutes);
+  app.use(express.json());
 
-  // Centralized error handling (MUST be after all routes)
+  // API v1 Consolidated Routes
+  const v1Router = express.Router();
+  v1Router.use(messagingRoutes);
+  v1Router.use(serverRoutes);
+  v1Router.use(notificationRoutes);
+  v1Router.use(userRoutes);
+
+  app.use("/api/v1", v1Router);
+
   app.use(errorHandler);
 }

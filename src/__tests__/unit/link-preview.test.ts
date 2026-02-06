@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getLinkPreview } from "@/controllers/link-preview";
+import { getLinkPreview } from "@/core/messaging/controllers";
 import axios from "axios";
 import { Request, Response } from "express";
 import {

@@ -1,6 +1,6 @@
 import http from "http";
-import { prisma } from "@/core/db";
-import logger from "@/core/logger";
+import { prisma } from "@/shared/core/db";
+import logger from "@/shared/core/logger";
 
 export function serverShutdown(httpServer: http.Server | undefined): void {
   const shutdown = async (signal: string) => {

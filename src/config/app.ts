@@ -2,7 +2,7 @@ import express, { Application } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { rateLimit } from "express-rate-limit";
-import logger from "@/core/logger";
+import logger from "@/shared/core/logger";
 
 // CORS configuration - support multiple origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS

@@ -1,55 +1,632 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/shared/core/logger.ts
+import winston from "winston";
+var logger, logger_default;
+var init_logger = __esm({
+  "src/shared/core/logger.ts"() {
+    logger = winston.createLogger({
+      level: "info",
+      format: winston.format.json(),
+      defaultMeta: { service: "user-service" },
+      transports: []
+    });
+    if (process.env.NODE_ENV !== "production") {
+      logger.add(
+        new winston.transports.Console({
+          format: winston.format.simple()
+        })
+      );
+    } else {
+      logger.add(
+        new winston.transports.Console({
+          format: winston.format.json()
+        })
+      );
+    }
+    logger_default = logger;
+  }
+});
+
+// src/shared/core/db.ts
+import { PrismaClient } from "@prisma/client";
+var prismaClientSingleton, globalForPrisma, prisma;
+var init_db = __esm({
+  "src/shared/core/db.ts"() {
+    prismaClientSingleton = () => {
+      return new PrismaClient();
+    };
+    globalForPrisma = globalThis;
+    prisma = globalForPrisma.prisma ?? prismaClientSingleton();
+    if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+  }
+});
+
+// src/shared/utils/errors.ts
+var AppError, BadRequestError, UnauthorizedError, NotFoundError;
+var init_errors = __esm({
+  "src/shared/utils/errors.ts"() {
+    AppError = class extends Error {
+      statusCode;
+      isOperational;
+      constructor(message, statusCode = 500, isOperational = true) {
+        super(message);
+        this.statusCode = statusCode;
+        this.isOperational = isOperational;
+        Object.setPrototypeOf(this, new.target.prototype);
+        Error.captureStackTrace(this, this.constructor);
+      }
+    };
+    BadRequestError = class extends AppError {
+      constructor(message = "Bad Request") {
+        super(message, 400);
+      }
+    };
+    UnauthorizedError = class extends AppError {
+      constructor(message = "Unauthorized") {
+        super(message, 401);
+      }
+    };
+    NotFoundError = class extends AppError {
+      constructor(message = "Resource not found") {
+        super(message, 404);
+      }
+    };
+  }
+});
+
+// src/shared/core/events.ts
+import { EventEmitter } from "events";
+var events, MESSAGE_EVENTS, REACTION_EVENTS, POLL_EVENTS;
+var init_events = __esm({
+  "src/shared/core/events.ts"() {
+    events = new EventEmitter();
+    MESSAGE_EVENTS = {
+      CREATED: "message:created",
+      UPDATED: "message:updated",
+      DELETED: "message:deleted"
+    };
+    REACTION_EVENTS = {
+      ADDED: "reaction:added",
+      REMOVED: "reaction:removed"
+    };
+    POLL_EVENTS = {
+      VOTED: "poll:voted"
+    };
+  }
+});
+
+// src/core/servers/services.ts
+var MemberService;
+var init_services = __esm({
+  "src/core/servers/services.ts"() {
+    init_db();
+    MemberService = class {
+      /**
+       * Resolve a member from a userId and context
+       */
+      static async resolveMember(userId, context) {
+        const { serverId, conversationId } = context;
+        if (serverId) {
+          return await prisma.member.findFirst({
+            where: {
+              serverId,
+              profile: { userId }
+            },
+            include: { profile: true }
+          });
+        }
+        if (conversationId) {
+          const conversation = await prisma.conversation.findUnique({
+            where: { id: conversationId },
+            include: {
+              memberOne: { include: { profile: true } },
+              memberTwo: { include: { profile: true } }
+            }
+          });
+          if (!conversation) return null;
+          if (conversation.memberOne.profile.userId === userId) {
+            return conversation.memberOne;
+          }
+          if (conversation.memberTwo.profile.userId === userId) {
+            return conversation.memberTwo;
+          }
+        }
+        return null;
+      }
+    };
+  }
+});
+
+// src/core/users/services.ts
+var getProfileByUserId;
+var init_services2 = __esm({
+  "src/core/users/services.ts"() {
+    init_db();
+    init_logger();
+    getProfileByUserId = async (userId) => {
+      return await prisma.profile.findFirst({
+        where: { userId }
+      });
+    };
+  }
+});
+
+// src/core/messaging/services.ts
+var services_exports = {};
+__export(services_exports, {
+  MessageService: () => MessageService,
+  ReactionService: () => ReactionService,
+  findOrCreateConversation: () => findOrCreateConversation
+});
+var MessageService, findOrCreateConversation, findConversation, createNewConversation, ReactionService;
+var init_services3 = __esm({
+  "src/core/messaging/services.ts"() {
+    init_db();
+    init_events();
+    init_errors();
+    init_services();
+    init_services2();
+    MessageService = class {
+      /**
+       * Create a channel message
+       */
+      static async createChannelMessage(payload) {
+        const {
+          content,
+          fileUrl,
+          isEncrypted,
+          parentId,
+          serverId,
+          channelId,
+          userId,
+          poll
+        } = payload;
+        const member = await MemberService.resolveMember(userId, { serverId });
+        if (!member) {
+          throw new NotFoundError("Member not found in this server");
+        }
+        console.time(
+          `[MessageService.createChannelMessage] DB Create with Poll: ${userId}`
+        );
+        const message = await prisma.message.create({
+          data: {
+            content,
+            fileUrl: fileUrl || null,
+            channelId,
+            memberId: member.id,
+            isEncrypted: !!isEncrypted,
+            parentId: parentId || null,
+            ...poll && {
+              poll: {
+                create: {
+                  question: poll.question,
+                  expiresAt: poll.expiresAt,
+                  options: {
+                    create: poll.options.map((text) => ({ text }))
+                  }
+                }
+              }
+            }
+          },
+          include: {
+            member: {
+              include: {
+                profile: true
+              }
+            },
+            poll: {
+              include: {
+                options: {
+                  include: {
+                    votes: true,
+                    _count: {
+                      select: { votes: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        });
+        console.timeEnd(
+          `[MessageService.createChannelMessage] DB Create with Poll: ${userId}`
+        );
+        events.emit(MESSAGE_EVENTS.CREATED, {
+          message,
+          type: "channel",
+          contextId: channelId
+        });
+        return message;
+        events.emit(MESSAGE_EVENTS.CREATED, {
+          message,
+          type: "channel",
+          contextId: channelId
+        });
+        return message;
+      }
+      /**
+       * Create a direct message
+       */
+      static async createDirectMessage(payload) {
+        const {
+          content,
+          fileUrl,
+          isEncrypted,
+          parentId,
+          conversationId,
+          userId,
+          poll
+        } = payload;
+        const member = await MemberService.resolveMember(userId, {
+          conversationId
+        });
+        if (!member) {
+          throw new NotFoundError("Member not found in conversation");
+        }
+        const message = await prisma.directMessage.create({
+          data: {
+            content,
+            fileUrl: fileUrl || null,
+            conversationId,
+            memberId: member.id,
+            isEncrypted: !!isEncrypted,
+            parentId: parentId || null,
+            ...poll && {
+              poll: {
+                create: {
+                  question: poll.question,
+                  expiresAt: poll.expiresAt,
+                  options: {
+                    create: poll.options.map((text) => ({ text }))
+                  }
+                }
+              }
+            }
+          },
+          include: {
+            member: {
+              include: {
+                profile: true
+              }
+            },
+            poll: {
+              include: {
+                options: {
+                  include: {
+                    votes: true,
+                    _count: {
+                      select: { votes: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        });
+        events.emit(MESSAGE_EVENTS.CREATED, {
+          message,
+          type: "direct",
+          contextId: conversationId
+        });
+        return message;
+      }
+      /**
+       * Update a message (Polymorphic)
+       */
+      static async updateMessage(payload) {
+        const { messageId, content, userId, serverId, conversationId } = payload;
+        const member = await MemberService.resolveMember(userId, {
+          serverId,
+          conversationId
+        });
+        if (!member) throw new UnauthorizedError("Member not found");
+        if (serverId) {
+          const message = await prisma.message.findFirst({
+            where: { id: messageId, memberId: member.id, deleted: false }
+          });
+          if (!message)
+            throw new NotFoundError("Message not found or unauthorized");
+          const updated = await prisma.message.update({
+            where: { id: messageId },
+            data: { content },
+            include: { member: { include: { profile: true } } }
+          });
+          events.emit(MESSAGE_EVENTS.UPDATED, {
+            message: updated,
+            type: "channel",
+            contextId: message.channelId
+          });
+          return updated;
+        } else if (conversationId) {
+          const message = await prisma.directMessage.findFirst({
+            where: { id: messageId, memberId: member.id, deleted: false }
+          });
+          if (!message)
+            throw new NotFoundError("Message not found or unauthorized");
+          const updated = await prisma.directMessage.update({
+            where: { id: messageId },
+            data: { content },
+            include: { member: { include: { profile: true } } }
+          });
+          events.emit(MESSAGE_EVENTS.UPDATED, {
+            message: updated,
+            type: "direct",
+            contextId: conversationId
+          });
+          return updated;
+        }
+        throw new BadRequestError(
+          "Context missing (serverId or conversationId required)"
+        );
+      }
+      /**
+       * Delete a message (Polymorphic)
+       */
+      static async deleteMessage(payload) {
+        const { messageId, userId, serverId, conversationId } = payload;
+        const member = await MemberService.resolveMember(userId, {
+          serverId,
+          conversationId
+        });
+        if (!member) throw new UnauthorizedError("Member not found");
+        if (serverId) {
+          const message = await prisma.message.findFirst({
+            where: { id: messageId },
+            include: { member: true }
+          });
+          if (!message || message.deleted)
+            throw new NotFoundError("Message not found");
+          const canDelete = message.memberId === member.id || ["ADMIN", "MODERATOR"].includes(member.role);
+          if (!canDelete)
+            throw new UnauthorizedError("Unauthorized to delete this message");
+          const deleted = await prisma.message.update({
+            where: { id: messageId },
+            data: {
+              fileUrl: null,
+              content: "This message has been deleted.",
+              deleted: true
+            },
+            include: { member: { include: { profile: true } } }
+          });
+          events.emit(MESSAGE_EVENTS.UPDATED, {
+            message: deleted,
+            type: "channel",
+            contextId: message.channelId
+          });
+          return deleted;
+        } else if (conversationId) {
+          const message = await prisma.directMessage.findFirst({
+            where: { id: messageId, conversationId }
+          });
+          if (!message || message.deleted)
+            throw new NotFoundError("Message not found");
+          if (message.memberId !== member.id)
+            throw new UnauthorizedError("Unauthorized to delete this message");
+          const deleted = await prisma.directMessage.update({
+            where: { id: messageId },
+            data: {
+              fileUrl: null,
+              content: "This message has been deleted.",
+              deleted: true
+            },
+            include: { member: { include: { profile: true } } }
+          });
+          events.emit(MESSAGE_EVENTS.UPDATED, {
+            message: deleted,
+            type: "direct",
+            contextId: conversationId
+          });
+          return deleted;
+        }
+        throw new BadRequestError(
+          "Context missing (serverId or conversationId required)"
+        );
+      }
+    };
+    findOrCreateConversation = async (memberOneId, memberTwoId) => {
+      let conversation = await findConversation(memberOneId, memberTwoId);
+      if (!conversation) {
+        conversation = await createNewConversation(memberOneId, memberTwoId);
+      }
+      return conversation;
+    };
+    findConversation = async (memberOneId, memberTwoId) => {
+      try {
+        return await prisma.conversation.findFirst({
+          where: {
+            OR: [
+              { AND: [{ memberOneId }, { memberTwoId }] },
+              { AND: [{ memberOneId: memberTwoId }, { memberTwoId: memberOneId }] }
+            ]
+          },
+          include: {
+            memberOne: {
+              include: {
+                profile: true
+              }
+            },
+            memberTwo: {
+              include: {
+                profile: true
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.error("Error finding conversation:", error);
+        return null;
+      }
+    };
+    createNewConversation = async (memberOneId, memberTwoId) => {
+      try {
+        return await prisma.conversation.create({
+          data: {
+            memberOneId,
+            memberTwoId
+          },
+          include: {
+            memberOne: {
+              include: {
+                profile: true
+              }
+            },
+            memberTwo: {
+              include: {
+                profile: true
+              }
+            }
+          }
+        });
+      } catch {
+        return null;
+      }
+    };
+    ReactionService = class {
+      /**
+       * Add a reaction to a message
+       */
+      static async addReaction(payload) {
+        const { userId, emoji, messageId, directMessageId } = payload;
+        const profile = await getProfileByUserId(userId);
+        if (!profile) throw new NotFoundError("Profile not found");
+        let authorProfileId = null;
+        let authorUserId = null;
+        if (messageId) {
+          const message = await prisma.message.findUnique({
+            where: { id: messageId },
+            include: { member: { include: { profile: true } } }
+          });
+          authorProfileId = message?.member.profile.id || null;
+          authorUserId = message?.member.profile.userId || null;
+        } else if (directMessageId) {
+          const directMessage = await prisma.directMessage.findUnique({
+            where: { id: directMessageId },
+            include: { member: { include: { profile: true } } }
+          });
+          authorProfileId = directMessage?.member.profile.id || null;
+          authorUserId = directMessage?.member.profile.userId || null;
+        }
+        const existingReaction = await prisma.reaction.findFirst({
+          where: {
+            profileId: profile.id,
+            messageId,
+            directMessageId
+          }
+        });
+        if (existingReaction) {
+          if (existingReaction.emoji === emoji) {
+            await prisma.reaction.delete({
+              where: { id: existingReaction.id }
+            });
+            events.emit(REACTION_EVENTS.REMOVED, { reaction: existingReaction });
+            return null;
+          }
+          const oldReaction = { ...existingReaction };
+          const updatedReaction = await prisma.reaction.update({
+            where: { id: existingReaction.id },
+            data: { emoji },
+            include: {
+              profile: {
+                select: { id: true, name: true, imageUrl: true }
+              }
+            }
+          });
+          events.emit(REACTION_EVENTS.REMOVED, { reaction: oldReaction });
+          events.emit(REACTION_EVENTS.ADDED, {
+            reaction: updatedReaction,
+            authorProfileId,
+            authorUserId,
+            senderProfileId: profile.id
+          });
+          return updatedReaction;
+        }
+        const reaction = await prisma.reaction.create({
+          data: {
+            emoji,
+            profileId: profile.id,
+            messageId,
+            directMessageId
+          },
+          include: {
+            profile: {
+              select: { id: true, name: true, imageUrl: true }
+            }
+          }
+        });
+        events.emit(REACTION_EVENTS.ADDED, {
+          reaction,
+          authorProfileId,
+          authorUserId,
+          senderProfileId: profile.id
+        });
+        return reaction;
+      }
+      /**
+       * Remove a reaction
+       */
+      static async removeReaction(payload) {
+        const { userId, reactionId } = payload;
+        const profile = await getProfileByUserId(userId);
+        if (!profile) throw new NotFoundError("Profile not found");
+        const reaction = await prisma.reaction.delete({
+          where: {
+            id: reactionId,
+            profileId: profile.id
+          }
+        });
+        events.emit(REACTION_EVENTS.REMOVED, { reaction });
+        return reaction;
+      }
+    };
+  }
+});
+
 // src/server.ts
+init_logger();
 import dotenv from "dotenv";
 import http from "http";
-
-// src/core/logger.ts
-import winston from "winston";
-var logger = winston.createLogger({
-  level: "info",
-  format: winston.format.json(),
-  defaultMeta: { service: "user-service" },
-  transports: []
-});
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.simple()
-    })
-  );
-} else {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.json()
-    })
-  );
-}
-var logger_default = logger;
 
 // src/config/routes.ts
 import express from "express";
 import { toNodeHandler } from "better-auth/node";
 
-// src/core/auth.ts
+// src/core/auth/config.ts
+init_db();
+init_logger();
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import {
   admin,
   customSession,
   magicLink,
-  twoFactor
+  twoFactor,
+  organization
 } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
+import { stripe } from "@better-auth/stripe";
+import { Stripe } from "stripe";
 
-// src/core/db.ts
-import { PrismaClient } from "@prisma/client";
-var prismaClientSingleton = () => {
-  return new PrismaClient();
-};
-var globalForPrisma = globalThis;
-var prisma = globalForPrisma.prisma ?? prismaClientSingleton();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-// src/utils/permissions.ts
+// src/shared/utils/permissions.ts
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
 var statements = {
@@ -113,7 +690,7 @@ async function sendEmailAction({
   }
 }
 
-// src/libs/argon2.ts
+// src/shared/libs/argon2.ts
 import { hash, verify } from "@node-rs/argon2";
 var opts = {
   memoryCost: 19456,
@@ -131,7 +708,7 @@ async function verifyPassword(data) {
   return result;
 }
 
-// src/core/auth.ts
+// src/core/auth/config.ts
 var auth = betterAuth({
   appName: "Aura",
   basePath: "/api/auth",
@@ -237,11 +814,11 @@ var auth = betterAuth({
       const value = await prisma.verification.findUnique({
         where: { identifier: key }
       });
-      console.log(`[SecondaryStorage] GET key=${key} found=${!!value}`);
+      logger_default.info(`[SecondaryStorage] GET key=${key} found=${!!value}`);
       return value?.value || null;
     },
     set: async (key, value, expiresAt) => {
-      console.log(`[SecondaryStorage] SET key=${key} expires=${expiresAt}`);
+      logger_default.info(`[SecondaryStorage] SET key=${key} expires=${expiresAt}`);
       await prisma.verification.upsert({
         where: { identifier: key },
         create: {
@@ -256,7 +833,7 @@ var auth = betterAuth({
       });
     },
     delete: async (key) => {
-      console.log(`[SecondaryStorage] DELETE key=${key}`);
+      logger_default.info(`[SecondaryStorage] DELETE key=${key}`);
       await prisma.verification.deleteMany({
         where: { identifier: key }
       });
@@ -295,6 +872,24 @@ var auth = betterAuth({
       otpOptions: {}
     }),
     passkey(),
+    organization(),
+    stripe({
+      stripeClient: new Stripe(process.env.STRIPE_KEY || "sk_test_"),
+      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+      subscription: {
+        enabled: true,
+        plans: [
+          {
+            name: "Plus",
+            priceId: process.env.STRIPE_PLUS_PRICE_ID || "price_1RoxnJHmTADgihIthZTLmrPn"
+          },
+          {
+            name: "Pro",
+            priceId: process.env.STRIPE_PRO_PRICE_ID || "price_1RoxnRHmTADgihIt4y8c0lVE"
+          }
+        ]
+      }
+    }),
     customSession(async ({ user, session }) => {
       return {
         session: {
@@ -315,19 +910,13 @@ var auth = betterAuth({
   ]
 });
 
-// src/middlewares/authMiddleware.ts
+// src/core/auth/middleware.ts
+init_logger();
 import { fromNodeHeaders } from "better-auth/node";
 var authMiddleware = async (req, res, next) => {
-  console.log(
-    `[AuthMiddleware] ${req.method} ${req.url} - Checking for session...`
-  );
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(req.headers)
   });
-  console.log(
-    "[AuthMiddleware] Session lookup result:",
-    session ? `FOUND (User: ${session.user.email})` : "NO SESSION FOUND"
-  );
   if (session) {
     res.locals.userId = session.user.id;
     res.locals.user = session.user;
@@ -335,28 +924,23 @@ var authMiddleware = async (req, res, next) => {
   }
   const internalSecret = req.headers["x-internal-secret"];
   const bridgedUserId = req.headers["x-user-id"];
-  console.log("[Auth] Bridged Auth Attempt:", {
-    hasSecret: !!internalSecret,
-    hasUserId: !!bridgedUserId,
-    secretMatch: internalSecret === process.env.SERVER_INTERNAL_SECRET
-  });
   if (internalSecret && internalSecret === process.env.SERVER_INTERNAL_SECRET && bridgedUserId) {
     res.locals.userId = bridgedUserId;
     return next();
   }
   if (process.env.NODE_ENV !== "production" && bridgedUserId) {
-    console.warn(
+    logger_default.warn(
       "[Auth] WARNING: Using insecure fallback userId:",
       bridgedUserId
     );
     res.locals.userId = bridgedUserId;
     return next();
   }
-  console.error("[Auth] Authentication FAILED for:", req.url);
+  logger_default.error("[Auth] Authentication FAILED for:", req.url);
   return res.status(401).json({ error: "Unauthorized - No valid session or secure bridge found" });
 };
 
-// src/utils/api-response.ts
+// src/shared/utils/api-response.ts
 var ApiResponse = class {
   /**
    * Send a success response
@@ -380,35 +964,9 @@ var ApiResponse = class {
   }
 };
 
-// src/utils/errors.ts
-var AppError = class extends Error {
-  statusCode;
-  isOperational;
-  constructor(message, statusCode = 500, isOperational = true) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = isOperational;
-    Object.setPrototypeOf(this, new.target.prototype);
-    Error.captureStackTrace(this, this.constructor);
-  }
-};
-var BadRequestError = class extends AppError {
-  constructor(message = "Bad Request") {
-    super(message, 400);
-  }
-};
-var UnauthorizedError = class extends AppError {
-  constructor(message = "Unauthorized") {
-    super(message, 401);
-  }
-};
-var NotFoundError = class extends AppError {
-  constructor(message = "Resource not found") {
-    super(message, 404);
-  }
-};
-
-// src/middlewares/errorHandler.ts
+// src/shared/middlewares/errorHandler.ts
+init_errors();
+init_logger();
 var errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || 500;
   let message = err.message || "Something went wrong";
@@ -425,245 +983,67 @@ var errorHandler = (err, req, res, next) => {
   ApiResponse.error(res, message, statusCode, err.stack);
 };
 
-// src/routes/messages.ts
+// src/core/messaging/routes.ts
 import { Router } from "express";
 
-// src/services/member.ts
-var MemberService = class {
-  /**
-   * Resolves a member context from either serverId or conversationId
-   */
-  static async resolveMember(userId, options) {
-    const { serverId, conversationId } = options;
-    if (serverId) {
-      return await prisma.member.findFirst({
-        where: {
-          profile: { userId },
-          serverId
-        }
-      });
-    }
-    if (conversationId) {
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        include: {
-          memberOne: true,
-          memberTwo: true
-        }
-      });
-      if (!conversation) return null;
-      return await prisma.member.findFirst({
-        where: {
-          profile: { userId },
-          OR: [
-            { id: conversation.memberOneId },
-            { id: conversation.memberTwoId }
-          ]
-        }
-      });
-    }
-    return null;
-  }
-};
+// src/core/messaging/controllers.ts
+init_db();
+init_logger();
+init_services3();
 
-// src/core/events.ts
-import { EventEmitter } from "events";
-var events = new EventEmitter();
-var MESSAGE_EVENTS = {
-  CREATED: "message:created",
-  UPDATED: "message:updated",
-  DELETED: "message:deleted"
-};
-var REACTION_EVENTS = {
-  ADDED: "reaction:added",
-  REMOVED: "reaction:removed"
-};
-
-// src/services/message.ts
-var MessageService = class {
+// src/core/messaging/pin.service.ts
+init_db();
+init_services();
+init_errors();
+var PinService = class {
   /**
-   * Create a channel message
+   * Pin a message
    */
-  static async createChannelMessage(payload) {
-    const {
-      content,
-      fileUrl,
-      isEncrypted,
-      parentId,
-      serverId,
-      channelId,
-      userId
-    } = payload;
-    const member = await MemberService.resolveMember(userId, { serverId });
-    if (!member) {
-      throw new NotFoundError("Member not found in this server");
-    }
-    const message = await prisma.message.create({
-      data: {
-        content,
-        fileUrl: fileUrl || null,
-        channelId,
-        memberId: member.id,
-        isEncrypted: !!isEncrypted,
-        parentId: parentId || null
-      },
-      include: {
-        member: {
-          include: {
-            profile: true
-          }
-        }
-      }
-    });
-    events.emit(MESSAGE_EVENTS.CREATED, {
-      message,
-      type: "channel",
-      contextId: channelId
-    });
-    return message;
+  static async pinMessage(payload) {
+    return this.setPinStatus({ ...payload, isPinned: true });
   }
   /**
-   * Create a direct message
+   * Unpin a message
    */
-  static async createDirectMessage(payload) {
-    const { content, fileUrl, isEncrypted, parentId, conversationId, userId } = payload;
-    const member = await MemberService.resolveMember(userId, {
-      conversationId
-    });
-    if (!member) {
-      throw new NotFoundError("Member not found in conversation");
-    }
-    const message = await prisma.directMessage.create({
-      data: {
-        content,
-        fileUrl: fileUrl || null,
-        conversationId,
-        memberId: member.id,
-        isEncrypted: !!isEncrypted,
-        parentId: parentId || null
-      },
-      include: {
-        member: {
-          include: {
-            profile: true
-          }
-        }
-      }
-    });
-    events.emit(MESSAGE_EVENTS.CREATED, {
-      message,
-      type: "direct",
-      contextId: conversationId
-    });
-    return message;
+  static async unpinMessage(payload) {
+    return this.setPinStatus({ ...payload, isPinned: false });
   }
   /**
-   * Update a message (Polymorphic)
+   * Shared logic for pinning/unpinning (DRY)
    */
-  static async updateMessage(payload) {
-    const { messageId, content, userId, serverId, conversationId } = payload;
+  static async setPinStatus(payload) {
+    const { messageId, userId, isPinned, serverId, conversationId } = payload;
     const member = await MemberService.resolveMember(userId, {
       serverId,
       conversationId
     });
     if (!member) throw new UnauthorizedError("Member not found");
     if (serverId) {
+      if (!["ADMIN", "MODERATOR"].includes(member.role)) {
+        throw new UnauthorizedError(
+          "Insufficient permissions to manage pinned messages"
+        );
+      }
       const message = await prisma.message.findFirst({
-        where: { id: messageId, memberId: member.id, deleted: false }
+        where: { id: messageId, channel: { serverId } }
       });
-      if (!message)
-        throw new NotFoundError("Message not found or unauthorized");
-      const updated = await prisma.message.update({
+      if (!message) throw new NotFoundError("Message not found in this server");
+      return await prisma.message.update({
         where: { id: messageId },
-        data: { content },
+        data: { isPinned },
         include: { member: { include: { profile: true } } }
       });
-      events.emit(MESSAGE_EVENTS.UPDATED, {
-        message: updated,
-        type: "channel",
-        contextId: message.channelId
-      });
-      return updated;
-    } else if (conversationId) {
-      const message = await prisma.directMessage.findFirst({
-        where: { id: messageId, memberId: member.id, deleted: false }
-      });
-      if (!message)
-        throw new NotFoundError("Message not found or unauthorized");
-      const updated = await prisma.directMessage.update({
-        where: { id: messageId },
-        data: { content },
-        include: { member: { include: { profile: true } } }
-      });
-      events.emit(MESSAGE_EVENTS.UPDATED, {
-        message: updated,
-        type: "direct",
-        contextId: conversationId
-      });
-      return updated;
-    }
-    throw new BadRequestError(
-      "Context missing (serverId or conversationId required)"
-    );
-  }
-  /**
-   * Delete a message (Polymorphic)
-   */
-  static async deleteMessage(payload) {
-    const { messageId, userId, serverId, conversationId } = payload;
-    const member = await MemberService.resolveMember(userId, {
-      serverId,
-      conversationId
-    });
-    if (!member) throw new UnauthorizedError("Member not found");
-    if (serverId) {
-      const message = await prisma.message.findFirst({
-        where: { id: messageId },
-        include: { member: true }
-      });
-      if (!message || message.deleted)
-        throw new NotFoundError("Message not found");
-      const canDelete = message.memberId === member.id || ["ADMIN", "MODERATOR"].includes(member.role);
-      if (!canDelete)
-        throw new UnauthorizedError("Unauthorized to delete this message");
-      const deleted = await prisma.message.update({
-        where: { id: messageId },
-        data: {
-          fileUrl: null,
-          content: "This message has been deleted.",
-          deleted: true
-        },
-        include: { member: { include: { profile: true } } }
-      });
-      events.emit(MESSAGE_EVENTS.UPDATED, {
-        message: deleted,
-        type: "channel",
-        contextId: message.channelId
-      });
-      return deleted;
     } else if (conversationId) {
       const message = await prisma.directMessage.findFirst({
         where: { id: messageId, conversationId }
       });
-      if (!message || message.deleted)
-        throw new NotFoundError("Message not found");
-      if (message.memberId !== member.id)
-        throw new UnauthorizedError("Unauthorized to delete this message");
-      const deleted = await prisma.directMessage.update({
+      if (!message)
+        throw new NotFoundError("Message not found in this conversation");
+      return await prisma.directMessage.update({
         where: { id: messageId },
-        data: {
-          fileUrl: null,
-          content: "This message has been deleted.",
-          deleted: true
-        },
+        data: { isPinned },
         include: { member: { include: { profile: true } } }
       });
-      events.emit(MESSAGE_EVENTS.UPDATED, {
-        message: deleted,
-        type: "direct",
-        contextId: conversationId
-      });
-      return deleted;
     }
     throw new BadRequestError(
       "Context missing (serverId or conversationId required)"
@@ -671,72 +1051,115 @@ var MessageService = class {
   }
 };
 
-// src/services/conversation.ts
-var findOrCreateConversation = async (memberOneId, memberTwoId) => {
-  let conversation = await findConversation(memberOneId, memberTwoId) || await findConversation(memberTwoId, memberOneId);
-  if (!conversation) {
-    conversation = await createNewConversation(memberOneId, memberTwoId);
-  }
-  return conversation;
-};
-var findConversation = async (memberOneId, memberTwoId) => {
-  try {
-    return await prisma.conversation.findFirst({
-      where: {
-        AND: [{ memberOneId }, { memberTwoId }]
-      },
-      include: {
-        memberOne: {
-          include: {
-            profile: true
-          }
-        },
-        memberTwo: {
-          include: {
-            profile: true
-          }
-        }
-      }
-    });
-  } catch (error) {
-    console.error("Error finding conversation:", error);
-    return null;
-  }
-};
-var createNewConversation = async (memberOneId, memberTwoId) => {
-  try {
-    return await prisma.conversation.create({
+// src/core/messaging/poll.service.ts
+init_db();
+init_services2();
+init_errors();
+var PollService = class {
+  /**
+   * Create a new poll attached to a message
+   */
+  static async createPoll(payload) {
+    const { question, options, expiresAt, messageId, directMessageId } = payload;
+    if (!options || options.length < 2) {
+      throw new BadRequestError("A poll must have at least 2 options");
+    }
+    return await prisma.poll.create({
       data: {
-        memberOneId,
-        memberTwoId
+        question,
+        expiresAt,
+        messageId,
+        directMessageId,
+        options: {
+          create: options.map((text) => ({ text }))
+        }
       },
       include: {
-        memberOne: {
+        options: {
           include: {
-            profile: true
-          }
-        },
-        memberTwo: {
-          include: {
-            profile: true
+            votes: true,
+            _count: {
+              select: { votes: true }
+            }
           }
         }
       }
     });
-  } catch {
-    return null;
+  }
+  /**
+   * Cast a vote in a poll
+   */
+  static async castVote(payload) {
+    const { pollId, userId, optionId } = payload;
+    const profile = await getProfileByUserId(userId);
+    if (!profile) throw new NotFoundError("Profile not found");
+    const poll = await prisma.poll.findUnique({
+      where: { id: pollId }
+    });
+    if (!poll) throw new NotFoundError("Poll not found");
+    if (poll.expiresAt && poll.expiresAt < /* @__PURE__ */ new Date()) {
+      throw new BadRequestError("This poll has expired");
+    }
+    const existingVote = await prisma.pollVote.findUnique({
+      where: {
+        profileId_pollId: {
+          profileId: profile.id,
+          pollId
+        }
+      }
+    });
+    if (existingVote) {
+      if (existingVote.optionId === optionId) {
+        return await prisma.pollVote.delete({
+          where: { id: existingVote.id }
+        });
+      }
+      return await prisma.pollVote.update({
+        where: { id: existingVote.id },
+        data: { optionId }
+      });
+    }
+    return await prisma.pollVote.create({
+      data: {
+        profileId: profile.id,
+        pollId,
+        optionId
+      }
+    });
+  }
+  /**
+   * Get poll results with vote counts
+   */
+  static async getPollResults(pollId) {
+    return await prisma.poll.findUnique({
+      where: { id: pollId },
+      include: {
+        options: {
+          include: {
+            votes: true,
+            _count: {
+              select: { votes: true }
+            }
+          }
+        }
+      }
+    });
   }
 };
 
-// src/controllers/message.ts
+// src/core/messaging/controllers.ts
+init_services3();
+init_events();
+import axios from "axios";
 var createChannelMessage = async (req, res) => {
   try {
-    const { content, fileUrl, isEncrypted, parentId } = req.body;
+    const { content, fileUrl, isEncrypted, parentId, poll } = req.body;
     const { serverId, channelId } = req.query;
     const userId = res.locals.userId;
     if (!serverId || !channelId) {
       return ApiResponse.error(res, "Server ID or Channel ID missing", 400);
     }
+    console.time(`[CREATE_CHANNEL_MESSAGE] Total: ${userId}`);
     const message = await MessageService.createChannelMessage({
       content,
       fileUrl,
@@ -744,8 +1167,10 @@ var createChannelMessage = async (req, res) => {
       parentId,
       serverId,
       channelId,
-      userId
+      userId,
+      poll
     });
+    console.timeEnd(`[CREATE_CHANNEL_MESSAGE] Total: ${userId}`);
     return ApiResponse.success(res, message, "Message created", 201);
   } catch (error) {
     logger_default.error("[CREATE_CHANNEL_MESSAGE]", error);
@@ -759,7 +1184,7 @@ var createChannelMessage = async (req, res) => {
 };
 var createDirectMessage = async (req, res) => {
   try {
-    const { content, fileUrl, isEncrypted, parentId } = req.body;
+    const { content, fileUrl, isEncrypted, parentId, poll } = req.body;
     const { conversationId } = req.query;
     const userId = res.locals.userId;
     if (!conversationId) {
@@ -771,7 +1196,8 @@ var createDirectMessage = async (req, res) => {
       isEncrypted,
       parentId,
       conversationId,
-      userId
+      userId,
+      poll
     });
     return ApiResponse.success(res, message, "Direct message created", 201);
   } catch (error) {
@@ -846,7 +1272,19 @@ var getMessages = async (req, res) => {
         take: MESSAGES_BATCH,
         ...cursor && { skip: 1, cursor: { id: cursor } },
         where: { channelId },
-        include: { member: { include: { profile: true } } },
+        include: {
+          member: { include: { profile: true } },
+          poll: {
+            include: {
+              options: {
+                include: {
+                  votes: true,
+                  _count: { select: { votes: true } }
+                }
+              }
+            }
+          }
+        },
         orderBy: { createdAt: "desc" }
       });
     } else if (receiverId) {
@@ -880,8 +1318,376 @@ var getMessages = async (req, res) => {
     return ApiResponse.error(res, "Internal server error");
   }
 };
+var getConversations = async (req, res) => {
+  try {
+    const { serverId } = req.query;
+    const userId = res.locals.userId;
+    const profile = await prisma.profile.findFirst({
+      where: {
+        userId
+      },
+      select: {
+        id: true,
+        userId: true,
+        members: serverId ? {
+          where: { serverId },
+          select: { id: true, serverId: true }
+        } : {
+          select: { id: true, serverId: true }
+        }
+      }
+    });
+    if (!profile) {
+      logger_default.warn(
+        `[ConversationController] No profile found for userId=${userId}`
+      );
+      return ApiResponse.error(res, "Profile not found", 404);
+    }
+    let memberIds = [];
+    if (serverId) {
+      const currentMember = profile.members.find(
+        (m) => m.serverId === serverId
+      );
+      if (!currentMember) {
+        return ApiResponse.error(res, "Member not found in this server", 404);
+      }
+      memberIds = [currentMember.id];
+    } else {
+      memberIds = profile.members.map((m) => m.id);
+    }
+    if (memberIds.length === 0) {
+      return ApiResponse.success(res, {
+        conversations: [],
+        currentMemberId: null
+      });
+    }
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        OR: [
+          { memberOneId: { in: memberIds } },
+          { memberTwoId: { in: memberIds } }
+        ]
+      },
+      include: {
+        memberOne: {
+          include: {
+            profile: true,
+            server: true
+          }
+        },
+        memberTwo: {
+          include: {
+            profile: true,
+            server: true
+          }
+        },
+        directMessages: {
+          take: 1,
+          orderBy: {
+            createdAt: "desc"
+          }
+        }
+      }
+    });
+    const activeConversations = conversations.filter((conv) => conv.directMessages.length > 0).sort((a, b) => {
+      const aTime = a.directMessages[0]?.createdAt.getTime() || 0;
+      const bTime = b.directMessages[0]?.createdAt.getTime() || 0;
+      return bTime - aTime;
+    });
+    return ApiResponse.success(res, {
+      conversations: activeConversations,
+      currentMemberIds: memberIds
+    });
+  } catch (error) {
+    logger_default.error("[GET_CONVERSATIONS]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var getChannelThreadMetadata = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    if (!messageId) {
+      return ApiResponse.error(res, "Message ID missing", 400);
+    }
+    const replies = await prisma.message.findMany({
+      where: {
+        parentId: messageId,
+        deleted: false
+      },
+      include: {
+        member: {
+          include: {
+            profile: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+    const participantsMap = /* @__PURE__ */ new Map();
+    replies.forEach((reply) => {
+      if (!participantsMap.has(reply.member.profile.id)) {
+        participantsMap.set(reply.member.profile.id, {
+          id: reply.member.profile.id,
+          name: reply.member.profile.name,
+          imageUrl: reply.member.profile.imageUrl
+        });
+      }
+    });
+    const participants = Array.from(participantsMap.values());
+    const lastReplyAt = replies.length > 0 ? replies[0].createdAt : null;
+    return ApiResponse.success(res, {
+      replyCount: replies.length,
+      participants,
+      lastReplyAt
+    });
+  } catch (error) {
+    logger_default.error("[GET_CHANNEL_THREAD_METADATA]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var getDirectThreadMetadata = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    if (!messageId) {
+      return ApiResponse.error(res, "Message ID missing", 400);
+    }
+    const replies = await prisma.directMessage.findMany({
+      where: {
+        parentId: messageId,
+        deleted: false
+      },
+      include: {
+        member: {
+          include: {
+            profile: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+    const participantsMap = /* @__PURE__ */ new Map();
+    replies.forEach((reply) => {
+      if (!participantsMap.has(reply.member.profile.id)) {
+        participantsMap.set(reply.member.profile.id, {
+          id: reply.member.profile.id,
+          name: reply.member.profile.name,
+          imageUrl: reply.member.profile.imageUrl
+        });
+      }
+    });
+    const participants = Array.from(participantsMap.values());
+    const lastReplyAt = replies.length > 0 ? replies[0].createdAt : null;
+    return ApiResponse.success(res, {
+      replyCount: replies.length,
+      participants,
+      lastReplyAt
+    });
+  } catch (error) {
+    logger_default.error("[GET_DIRECT_THREAD_METADATA]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var addReaction = async (req, res) => {
+  try {
+    const userId = res.locals.userId;
+    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
+    const { emoji, messageId, directMessageId } = req.body;
+    if (!emoji || !messageId && !directMessageId) {
+      return ApiResponse.error(res, "Missing required fields", 400);
+    }
+    const reaction = await ReactionService2.addReaction({
+      userId,
+      emoji,
+      messageId,
+      directMessageId
+    });
+    return ApiResponse.success(res, reaction, "Reaction added");
+  } catch (error) {
+    logger_default.error("[ADD_REACTION]", error);
+    const status = error.message === "Profile not found" ? 404 : 500;
+    return ApiResponse.error(
+      res,
+      error.message || "Internal server error",
+      status
+    );
+  }
+};
+var removeReaction = async (req, res) => {
+  try {
+    const { reactionId } = req.params;
+    const userId = res.locals.userId;
+    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
+    await ReactionService2.removeReaction({
+      userId,
+      reactionId
+    });
+    return ApiResponse.success(res, { success: true }, "Reaction removed");
+  } catch (error) {
+    logger_default.error("[REMOVE_REACTION]", error);
+    const status = error.message === "Profile not found" ? 404 : 500;
+    return ApiResponse.error(
+      res,
+      error.message || "Internal server error",
+      status
+    );
+  }
+};
+var getMessageReactions = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { type } = req.query;
+    const reactions = await prisma.reaction.findMany({
+      where: type === "direct" ? { directMessageId: messageId } : { messageId },
+      include: {
+        profile: {
+          select: { id: true, name: true, imageUrl: true }
+        }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+    const groupedReactions = reactions.reduce(
+      (acc, reaction) => {
+        if (!acc[reaction.emoji]) {
+          acc[reaction.emoji] = [];
+        }
+        acc[reaction.emoji].push(reaction);
+        return acc;
+      },
+      {}
+    );
+    return ApiResponse.success(res, groupedReactions);
+  } catch (error) {
+    logger_default.error("[GET_MESSAGE_REACTIONS]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var getLinkPreview = async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url || typeof url !== "string") {
+      return ApiResponse.error(res, "URL is required", 400);
+    }
+    const apiKey = process.env.OPENGRAPH_IO_KEY;
+    if (!apiKey) {
+      logger_default.error("[LinkPreview] OPENGRAPH_IO_KEY is missing");
+      return ApiResponse.error(
+        res,
+        "Link preview service is not configured.",
+        500
+      );
+    }
+    const opengraphUrl = `https://opengraph.io/api/1.1/site/${encodeURIComponent(url)}?app_id=${apiKey}`;
+    const response = await axios.get(opengraphUrl, { timeout: 1e4 });
+    const data = response.data;
+    if (data.error) {
+      return ApiResponse.error(res, data.error.message, 400);
+    }
+    const hybrid = data.hybridGraph || {};
+    const openGraph = data.openGraph || {};
+    const htmlInferred = data.htmlInferred || {};
+    let fallbackTitle = url;
+    try {
+      fallbackTitle = new URL(url).hostname;
+    } catch (e) {
+    }
+    return ApiResponse.success(
+      res,
+      {
+        title: hybrid.title || openGraph.title || htmlInferred.title || fallbackTitle,
+        description: hybrid.description || openGraph.description || htmlInferred.description || "",
+        image: hybrid.image || openGraph.image || htmlInferred.image || null,
+        favIcon: data.favicon || null,
+        url: data.url || url
+      },
+      "Link preview fetched"
+    );
+  } catch (error) {
+    logger_default.error(`[LinkPreview] Error: ${error.message}`);
+    return ApiResponse.error(res, "Failed to fetch link preview");
+  }
+};
+var ReactionService2 = {
+  addReaction: async (payload) => {
+    const { ReactionService: RealReactionService } = (init_services3(), __toCommonJS(services_exports));
+    return await RealReactionService.addReaction(payload);
+  },
+  removeReaction: async (payload) => {
+    const { ReactionService: RealReactionService } = (init_services3(), __toCommonJS(services_exports));
+    return await RealReactionService.removeReaction(payload);
+  }
+};
+var pinMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { serverId, conversationId } = req.query;
+    const userId = res.locals.userId;
+    const message = await PinService.pinMessage({
+      messageId,
+      userId,
+      serverId,
+      conversationId
+    });
+    events.emit(MESSAGE_EVENTS.UPDATED, {
+      message,
+      type: serverId ? "channel" : "direct",
+      contextId: serverId ? message.channelId : message.conversationId
+    });
+    return ApiResponse.success(res, message, "Message pinned");
+  } catch (error) {
+    logger_default.error("[PIN_MESSAGE]", error);
+    return ApiResponse.error(res, error.message || "Internal server error");
+  }
+};
+var unpinMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { serverId, conversationId } = req.query;
+    const userId = res.locals.userId;
+    const message = await PinService.unpinMessage({
+      messageId,
+      userId,
+      serverId,
+      conversationId
+    });
+    events.emit(MESSAGE_EVENTS.UPDATED, {
+      message,
+      type: serverId ? "channel" : "direct",
+      contextId: serverId ? message.channelId : message.conversationId
+    });
+    return ApiResponse.success(res, message, "Message unpinned");
+  } catch (error) {
+    logger_default.error("[UNPIN_MESSAGE]", error);
+    return ApiResponse.error(res, error.message || "Internal server error");
+  }
+};
+var castPollVote = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const { optionId } = req.body;
+    const userId = res.locals.userId;
+    if (!optionId) {
+      return ApiResponse.error(res, "Option ID missing", 400);
+    }
+    await PollService.castVote({
+      pollId,
+      userId,
+      optionId
+    });
+    const updatedPoll = await PollService.getPollResults(pollId);
+    events.emit(POLL_EVENTS.VOTED, { poll: updatedPoll });
+    return ApiResponse.success(res, updatedPoll, "Vote cast successfully");
+  } catch (error) {
+    logger_default.error("[CAST_POLL_VOTE]", error);
+    return ApiResponse.error(res, error.message || "Internal server error");
+  }
+};
 
-// src/middlewares/validationMiddleware.ts
+// src/shared/middlewares/validationMiddleware.ts
+init_logger();
 var validator = (schema) => (req, res, next) => {
   try {
     schema.parse({
@@ -891,13 +1697,13 @@ var validator = (schema) => (req, res, next) => {
     });
     next();
   } catch (err) {
-    console.log(err);
+    logger_default.error("[ValidationMiddleware] Validation error:", err);
     return res.status(400).send(err.errors);
   }
 };
 var validationMiddleware_default = validator;
 
-// src/schemas/message.schema.ts
+// src/shared/schemas/message.schema.ts
 import { z } from "zod";
 var createChannelMessageSchema = z.object({
   body: z.object({
@@ -957,314 +1763,394 @@ var sendMessageSchema = z.object({
   })
 });
 
-// src/routes/messages.ts
+// src/core/messaging/routes.ts
 var router = Router();
-router.post(
+var messageRouter = Router();
+messageRouter.post(
   "/channel",
   validationMiddleware_default(createChannelMessageSchema),
   createChannelMessage
 );
-router.post(
+messageRouter.post(
   "/direct",
   validationMiddleware_default(createDirectMessageSchema),
   createDirectMessage
 );
-router.patch("/:messageId", validationMiddleware_default(updateMessageSchema), updateMessage);
-router.delete("/:messageId", validationMiddleware_default(deleteMessageSchema), deleteMessage);
-router.get("/conversation", getConversation);
-router.get("/", getMessages);
-var messages_default = router;
+messageRouter.patch(
+  "/:messageId",
+  validationMiddleware_default(updateMessageSchema),
+  updateMessage
+);
+messageRouter.delete(
+  "/:messageId",
+  validationMiddleware_default(deleteMessageSchema),
+  deleteMessage
+);
+messageRouter.post("/:messageId/pin", pinMessage);
+messageRouter.delete("/:messageId/pin", unpinMessage);
+messageRouter.get("/conversation", getConversation);
+messageRouter.get("/", getMessages);
+var conversationRouter = Router();
+conversationRouter.get("/", getConversations);
+var threadRouter = Router();
+threadRouter.get("/channel/:messageId", getChannelThreadMetadata);
+threadRouter.get("/direct/:messageId", getDirectThreadMetadata);
+var reactionRouter = Router();
+reactionRouter.get("/message/:messageId", getMessageReactions);
+reactionRouter.post("/", addReaction);
+reactionRouter.delete("/:reactionId", removeReaction);
+var pollRouter = Router();
+pollRouter.post("/:pollId/vote", castPollVote);
+var linkPreviewRouter = Router();
+linkPreviewRouter.get("/", getLinkPreview);
+router.use("/messages", messageRouter);
+router.use("/conversations", conversationRouter);
+router.use("/threads", threadRouter);
+router.use("/reactions", reactionRouter);
+router.use("/polls", pollRouter);
+router.use("/link-preview", linkPreviewRouter);
+var routes_default = router;
 
-// src/routes/conversations.ts
+// src/core/servers/routes.ts
 import { Router as Router2 } from "express";
 
-// src/controllers/conversation.ts
-var getConversations = async (req, res) => {
+// src/core/servers/controllers.ts
+init_db();
+init_logger();
+var getChannel = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId }
+    });
+    return ApiResponse.success(res, channel);
+  } catch (error) {
+    logger_default.error("[GET_CHANNEL]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var getServerChannels = async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const userId = res.locals.userId;
+    if (!serverId) {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: { userId }
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const channels = await prisma.channel.findMany({
+      where: { serverId },
+      orderBy: { createdAt: "asc" }
+    });
+    return ApiResponse.success(res, channels);
+  } catch (error) {
+    logger_default.error("[GET_SERVER_CHANNELS]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var getMember = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const member = await prisma.member.findUnique({
+      where: { id: memberId },
+      include: { profile: true }
+    });
+    return ApiResponse.success(res, member);
+  } catch (error) {
+    logger_default.error("[GET_MEMBER]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var getServerMembers = async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const userId = res.locals.userId;
+    if (!serverId) {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: { userId }
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const members = await prisma.member.findMany({
+      where: { serverId },
+      include: { profile: true },
+      orderBy: { role: "asc" }
+    });
+    return ApiResponse.success(res, members);
+  } catch (error) {
+    logger_default.error("[GET_SERVER_MEMBERS]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var createChannel = async (req, res) => {
   try {
     const { serverId } = req.query;
+    const { name, type } = req.body;
     const userId = res.locals.userId;
-    const profile = await prisma.profile.findFirst({
+    if (!serverId || typeof serverId !== "string") {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    if (!name) {
+      return ApiResponse.error(res, "Channel name is required", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
       where: {
-        userId
-      },
-      include: {
-        members: true
+        serverId,
+        profile: { userId },
+        role: { in: ["ADMIN", "MODERATOR"] }
       }
     });
-    console.log(
-      `[ConversationController] Profile lookup for userId=${userId}:`,
-      profile ? "FOUND" : "NOT FOUND"
-    );
-    if (!profile) {
-      console.warn(
-        `[ConversationController] No profile found for userId=${userId} in database.`
-      );
-      return ApiResponse.error(res, "Profile not found", 404);
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
     }
-    let memberIds = [];
-    if (serverId) {
-      const currentMember = profile.members.find(
-        (m) => m.serverId === serverId
-      );
-      if (!currentMember) {
-        return ApiResponse.error(res, "Member not found in this server", 404);
-      }
-      memberIds = [currentMember.id];
-    } else {
-      memberIds = profile.members.map((m) => m.id);
-    }
-    if (memberIds.length === 0) {
-      return ApiResponse.success(res, {
-        conversations: [],
-        currentMemberId: null
-      });
-    }
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        OR: [
-          { memberOneId: { in: memberIds } },
-          { memberTwoId: { in: memberIds } }
-        ]
-      },
-      include: {
-        memberOne: {
-          include: {
-            profile: true,
-            server: true
-            // Include server info so user knows which server the DM is from
-          }
-        },
-        memberTwo: {
-          include: {
-            profile: true,
-            server: true
-          }
-        },
-        directMessages: {
-          take: 1,
-          orderBy: {
-            createdAt: "desc"
+    const server2 = await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        channels: {
+          create: {
+            name,
+            type: type || "TEXT",
+            profileId: currentMember.profileId
           }
         }
+      },
+      include: {
+        channels: { orderBy: { createdAt: "asc" } },
+        members: { include: { profile: true }, orderBy: { role: "asc" } }
       }
     });
-    const activeConversations = conversations.filter((conv) => conv.directMessages.length > 0).sort((a, b) => {
-      const aTime = a.directMessages[0]?.createdAt.getTime() || 0;
-      const bTime = b.directMessages[0]?.createdAt.getTime() || 0;
-      return bTime - aTime;
-    });
-    return ApiResponse.success(res, {
-      conversations: activeConversations,
-      currentMemberIds: memberIds
-    });
+    return ApiResponse.success(res, server2);
   } catch (error) {
-    console.error("[GET_CONVERSATIONS]", error);
+    logger_default.error("[CREATE_CHANNEL]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var updateChannel = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { serverId } = req.query;
+    const { name, type } = req.body;
+    const userId = res.locals.userId;
+    if (!serverId || typeof serverId !== "string") {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    if (!channelId) {
+      return ApiResponse.error(res, "Channel ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: { userId },
+        role: { in: ["ADMIN", "MODERATOR"] }
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const channel = await prisma.channel.findFirst({
+      where: { id: channelId, serverId }
+    });
+    if (!channel) {
+      return ApiResponse.error(res, "Channel not found", 404);
+    }
+    if (channel.name === "general") {
+      return ApiResponse.error(res, "Cannot edit general channel", 400);
+    }
+    const server2 = await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        channels: {
+          update: {
+            where: { id: channelId },
+            data: { name, type }
+          }
+        }
+      },
+      include: {
+        channels: { orderBy: { createdAt: "asc" } },
+        members: { include: { profile: true }, orderBy: { role: "asc" } }
+      }
+    });
+    return ApiResponse.success(res, server2);
+  } catch (error) {
+    logger_default.error("[UPDATE_CHANNEL]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var deleteChannel = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { serverId } = req.query;
+    const userId = res.locals.userId;
+    if (!serverId || typeof serverId !== "string") {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    if (!channelId) {
+      return ApiResponse.error(res, "Channel ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: { userId },
+        role: { in: ["ADMIN", "MODERATOR"] }
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const channel = await prisma.channel.findFirst({
+      where: { id: channelId, serverId }
+    });
+    if (!channel) {
+      return ApiResponse.error(res, "Channel not found", 404);
+    }
+    if (channel.name === "general") {
+      return ApiResponse.error(res, "Cannot delete general channel", 400);
+    }
+    const server2 = await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        channels: {
+          delete: { id: channelId }
+        }
+      },
+      include: {
+        channels: { orderBy: { createdAt: "asc" } },
+        members: { include: { profile: true }, orderBy: { role: "asc" } }
+      }
+    });
+    return ApiResponse.success(res, server2);
+  } catch (error) {
+    logger_default.error("[DELETE_CHANNEL]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var updateMemberRole = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const { serverId } = req.query;
+    const { role } = req.body;
+    const userId = res.locals.userId;
+    if (!serverId || typeof serverId !== "string") {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    if (!memberId) {
+      return ApiResponse.error(res, "Member ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: { userId },
+        role: "ADMIN"
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const server2 = await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        members: {
+          update: {
+            where: { id: memberId },
+            data: { role }
+          }
+        }
+      },
+      include: {
+        channels: { orderBy: { createdAt: "asc" } },
+        members: { include: { profile: true }, orderBy: { role: "asc" } }
+      }
+    });
+    return ApiResponse.success(res, server2);
+  } catch (error) {
+    logger_default.error("[UPDATE_MEMBER_ROLE]", error);
+    return ApiResponse.error(res, "Internal server error");
+  }
+};
+var kickMember = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const { serverId } = req.query;
+    const userId = res.locals.userId;
+    if (!serverId || typeof serverId !== "string") {
+      return ApiResponse.error(res, "Server ID missing", 400);
+    }
+    if (!memberId) {
+      return ApiResponse.error(res, "Member ID missing", 400);
+    }
+    const currentMember = await prisma.member.findFirst({
+      where: {
+        serverId,
+        profile: { userId },
+        role: "ADMIN"
+      }
+    });
+    if (!currentMember) {
+      return ApiResponse.error(res, "Forbidden", 403);
+    }
+    const server2 = await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        members: {
+          delete: { id: memberId }
+        }
+      },
+      include: {
+        channels: { orderBy: { createdAt: "asc" } },
+        members: { include: { profile: true }, orderBy: { role: "asc" } }
+      }
+    });
+    return ApiResponse.success(res, server2);
+  } catch (error) {
+    logger_default.error("[KICK_MEMBER]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
 
-// src/routes/conversations.ts
+// src/core/servers/routes.ts
 var router2 = Router2();
-router2.get("/", getConversations);
-var conversations_default = router2;
+var channelRouter = Router2();
+channelRouter.get("/server/:serverId", getServerChannels);
+channelRouter.get("/:channelId", getChannel);
+channelRouter.post("/", createChannel);
+channelRouter.patch("/:channelId", updateChannel);
+channelRouter.delete("/:channelId", deleteChannel);
+var memberRouter = Router2();
+memberRouter.get("/server/:serverId", getServerMembers);
+memberRouter.get("/:memberId", getMember);
+memberRouter.patch("/:memberId", updateMemberRole);
+memberRouter.delete("/:memberId", kickMember);
+router2.use("/channels", channelRouter);
+router2.use("/members", memberRouter);
+var routes_default2 = router2;
 
-// src/routes/link-preview.ts
+// src/core/notifications/routes.ts
 import { Router as Router3 } from "express";
 
-// src/controllers/link-preview.ts
-import axios from "axios";
-var getLinkPreview = async (req, res) => {
-  try {
-    const { url } = req.query;
-    if (!url || typeof url !== "string") {
-      return ApiResponse.error(res, "URL is required", 400);
-    }
-    const apiKey = process.env.OPENGRAPH_IO_KEY;
-    if (!apiKey) {
-      logger_default.error(
-        "[LinkPreview] OPENGRAPH_IO_KEY is missing in environment variables."
-      );
-      return ApiResponse.error(
-        res,
-        "Link preview service is not configured.",
-        500
-      );
-    }
-    logger_default.info(`[LinkPreview] Fetching from OpenGraph.io for: ${url}`);
-    const opengraphUrl = `https://opengraph.io/api/1.1/site/${encodeURIComponent(url)}?app_id=${apiKey}`;
-    const response = await axios.get(opengraphUrl, { timeout: 1e4 });
-    const data = response.data;
-    if (data.error) {
-      logger_default.error(`[OpenGraph.io] Error: ${data.error.message}`);
-      return ApiResponse.error(res, data.error.message, 400);
-    }
-    const hybrid = data.hybridGraph || {};
-    const openGraph = data.openGraph || {};
-    const htmlInferred = data.htmlInferred || {};
-    let fallbackTitle = url;
-    try {
-      fallbackTitle = new URL(url).hostname;
-    } catch (e) {
-    }
-    return ApiResponse.success(
-      res,
-      {
-        title: hybrid.title || openGraph.title || htmlInferred.title || fallbackTitle,
-        description: hybrid.description || openGraph.description || htmlInferred.description || "",
-        image: hybrid.image || openGraph.image || htmlInferred.image || null,
-        favIcon: data.favicon || null,
-        url: data.url || url
-      },
-      "Link preview fetched"
-    );
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      logger_default.error(
-        `[LinkPreview] OpenGraph.io returned ${error.response.status}: ${JSON.stringify(error.response.data)}`
-      );
-      return ApiResponse.error(
-        res,
-        error.response.data.error?.message || "External service error",
-        error.response.status
-      );
-    }
-    logger_default.error(`[LinkPreview] Unexpected Error: ${error.message}`);
-    return ApiResponse.error(res, "Failed to fetch link preview");
-  }
-};
-
-// src/routes/link-preview.ts
-var router3 = Router3();
-router3.get("/", getLinkPreview);
-var link_preview_default = router3;
-
-// src/routes/threads.ts
-import { Router as Router4 } from "express";
-
-// src/controllers/thread.ts
-var getChannelThreadMetadata = async (req, res) => {
-  try {
-    const { messageId } = req.params;
-    if (!messageId) {
-      return ApiResponse.error(res, "Message ID missing", 400);
-    }
-    const replies = await prisma.message.findMany({
-      where: {
-        parentId: messageId,
-        deleted: false
-      },
-      include: {
-        member: {
-          include: {
-            profile: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
-    const participantsMap = /* @__PURE__ */ new Map();
-    replies.forEach((reply) => {
-      if (!participantsMap.has(reply.member.profile.id)) {
-        participantsMap.set(reply.member.profile.id, {
-          id: reply.member.profile.id,
-          name: reply.member.profile.name,
-          imageUrl: reply.member.profile.imageUrl
-        });
-      }
-    });
-    const participants = Array.from(participantsMap.values());
-    const lastReplyAt = replies.length > 0 ? replies[0].createdAt : null;
-    return ApiResponse.success(res, {
-      replyCount: replies.length,
-      participants,
-      lastReplyAt
-    });
-  } catch (error) {
-    console.error("[GET_CHANNEL_THREAD_METADATA]", error);
-    return ApiResponse.error(res, "Internal server error");
-  }
-};
-var getDirectThreadMetadata = async (req, res) => {
-  try {
-    const { messageId } = req.params;
-    if (!messageId) {
-      return ApiResponse.error(res, "Message ID missing", 400);
-    }
-    const replies = await prisma.directMessage.findMany({
-      where: {
-        parentId: messageId,
-        deleted: false
-      },
-      include: {
-        member: {
-          include: {
-            profile: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
-    const participantsMap = /* @__PURE__ */ new Map();
-    replies.forEach((reply) => {
-      if (!participantsMap.has(reply.member.profile.id)) {
-        participantsMap.set(reply.member.profile.id, {
-          id: reply.member.profile.id,
-          name: reply.member.profile.name,
-          imageUrl: reply.member.profile.imageUrl
-        });
-      }
-    });
-    const participants = Array.from(participantsMap.values());
-    const lastReplyAt = replies.length > 0 ? replies[0].createdAt : null;
-    return ApiResponse.success(res, {
-      replyCount: replies.length,
-      participants,
-      lastReplyAt
-    });
-  } catch (error) {
-    console.error("[GET_DIRECT_THREAD_METADATA]", error);
-    return ApiResponse.error(res, "Internal server error");
-  }
-};
-
-// src/routes/threads.ts
-var router4 = Router4();
-router4.get("/channel/:messageId", getChannelThreadMetadata);
-router4.get("/direct/:messageId", getDirectThreadMetadata);
-var threads_default = router4;
-
-// src/routes/notifications.ts
-import { Router as Router5 } from "express";
-
-// src/services/profile.ts
-var getProfileByUserId = async (userId) => {
-  return await prisma.profile.findUnique({
-    where: { userId }
-  });
-};
-
-// src/controllers/notification.ts
+// src/core/notifications/controllers.ts
+init_db();
+init_logger();
 var getNotifications = async (req, res) => {
   try {
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    if (!prisma.notification) {
-      logger_default.error(
-        "[ERROR] prisma.notification is UNDEFINED. Current models:",
-        Object.keys(prisma)
-      );
-      return ApiResponse.error(
-        res,
-        "Database model 'notification' not found in Prisma client",
-        500
-      );
+    const profile = await prisma.profile.findFirst({ where: { userId } });
+    if (!profile) {
+      return ApiResponse.error(res, "Profile not found", 404);
     }
-    const profile = await getProfileByUserId(userId);
-    if (!profile) return ApiResponse.error(res, "Profile not found", 404);
     const notifications = await prisma.notification.findMany({
       where: { receiverId: profile.id },
       include: {
@@ -1277,16 +2163,17 @@ var getNotifications = async (req, res) => {
     });
     return ApiResponse.success(res, notifications);
   } catch (error) {
-    console.error("[GET_NOTIFICATIONS]", error);
+    logger_default.error("[GET_NOTIFICATIONS]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
 var getUnreadCount = async (req, res) => {
   try {
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    const profile = await getProfileByUserId(userId);
-    if (!profile) return ApiResponse.error(res, "Profile not found", 404);
+    const profile = await prisma.profile.findFirst({ where: { userId } });
+    if (!profile) {
+      return ApiResponse.error(res, "Profile not found", 404);
+    }
     const count = await prisma.notification.count({
       where: {
         receiverId: profile.id,
@@ -1295,7 +2182,7 @@ var getUnreadCount = async (req, res) => {
     });
     return ApiResponse.success(res, { count });
   } catch (error) {
-    console.error("[GET_UNREAD_COUNT]", error);
+    logger_default.error("[GET_UNREAD_COUNT]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
@@ -1303,8 +2190,7 @@ var markAsRead = async (req, res) => {
   try {
     const { notificationId } = req.params;
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    const profile = await getProfileByUserId(userId);
+    const profile = await prisma.profile.findFirst({ where: { userId } });
     if (!profile) return ApiResponse.error(res, "Profile not found", 404);
     const notification = await prisma.notification.update({
       where: {
@@ -1313,23 +2199,20 @@ var markAsRead = async (req, res) => {
       },
       data: { isRead: true }
     });
-    const io2 = req.app.get("io");
-    io2.to(`user:${userId}`).emit("notification:read", notification);
     return ApiResponse.success(
       res,
       notification,
       "Notification marked as read"
     );
   } catch (error) {
-    console.error("[MARK_AS_READ]", error);
+    logger_default.error("[MARK_AS_READ]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
 var markAllAsRead = async (req, res) => {
   try {
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    const profile = await getProfileByUserId(userId);
+    const profile = await prisma.profile.findFirst({ where: { userId } });
     if (!profile) return ApiResponse.error(res, "Profile not found", 404);
     await prisma.notification.updateMany({
       where: {
@@ -1338,15 +2221,13 @@ var markAllAsRead = async (req, res) => {
       },
       data: { isRead: true }
     });
-    const io2 = req.app.get("io");
-    io2.to(`user:${userId}`).emit("notification:all-read");
     return ApiResponse.success(
       res,
       { success: true },
       "All notifications marked as read"
     );
   } catch (error) {
-    console.error("[MARK_ALL_AS_READ]", error);
+    logger_default.error("[MARK_ALL_AS_READ]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
@@ -1354,8 +2235,7 @@ var deleteNotification = async (req, res) => {
   try {
     const { notificationId } = req.params;
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    const profile = await getProfileByUserId(userId);
+    const profile = await prisma.profile.findFirst({ where: { userId } });
     if (!profile) return ApiResponse.error(res, "Profile not found", 404);
     await prisma.notification.delete({
       where: {
@@ -1363,324 +2243,68 @@ var deleteNotification = async (req, res) => {
         receiverId: profile.id
       }
     });
-    const io2 = req.app.get("io");
-    io2.to(`user:${userId}`).emit("notification:deleted", {
-      id: notificationId
-    });
     return ApiResponse.success(res, { success: true }, "Notification deleted");
   } catch (error) {
-    console.error("[DELETE_NOTIFICATION]", error);
+    logger_default.error("[DELETE_NOTIFICATION]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
 var deleteAllNotifications = async (req, res) => {
   try {
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    const profile = await getProfileByUserId(userId);
+    const profile = await prisma.profile.findFirst({ where: { userId } });
     if (!profile) return ApiResponse.error(res, "Profile not found", 404);
     await prisma.notification.deleteMany({
       where: { receiverId: profile.id }
     });
-    const io2 = req.app.get("io");
-    io2.to(`user:${userId}`).emit("notification:all-deleted");
     return ApiResponse.success(
       res,
       { success: true },
       "All notifications deleted"
     );
   } catch (error) {
-    console.error("[DELETE_ALL_NOTIFICATIONS]", error);
+    logger_default.error("[DELETE_ALL_NOTIFICATIONS]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
 
-// src/routes/notifications.ts
-var router5 = Router5();
-router5.use(authMiddleware);
-router5.get("/", getNotifications);
-router5.get("/unread-count", getUnreadCount);
-router5.patch("/:notificationId/read", markAsRead);
-router5.patch("/mark-all-read", markAllAsRead);
-router5.delete("/:notificationId", deleteNotification);
-router5.delete("/delete-all", deleteAllNotifications);
-var notifications_default = router5;
+// src/core/notifications/routes.ts
+var router3 = Router3();
+router3.get("/notifications", getNotifications);
+router3.get("/notifications/unread-count", getUnreadCount);
+router3.patch("/notifications/:notificationId/read", markAsRead);
+router3.patch("/notifications/mark-all-read", markAllAsRead);
+router3.delete("/notifications/:notificationId", deleteNotification);
+router3.delete("/notifications/delete-all", deleteAllNotifications);
+var routes_default3 = router3;
 
-// src/routes/reactions.ts
-import { Router as Router6 } from "express";
+// src/core/users/routes.ts
+import { Router as Router4 } from "express";
 
-// src/services/reaction.ts
-var ReactionService = class {
-  /**
-   * Add a reaction to a message
-   */
-  static async addReaction(payload) {
-    const { userId, emoji, messageId, directMessageId } = payload;
-    const profile = await getProfileByUserId(userId);
-    if (!profile) throw new NotFoundError("Profile not found");
-    let authorProfileId = null;
-    let authorUserId = null;
-    if (messageId) {
-      const message = await prisma.message.findUnique({
-        where: { id: messageId },
-        include: { member: { include: { profile: true } } }
-      });
-      authorProfileId = message?.member.profile.id || null;
-      authorUserId = message?.member.profile.userId || null;
-    } else if (directMessageId) {
-      const directMessage = await prisma.directMessage.findUnique({
-        where: { id: directMessageId },
-        include: { member: { include: { profile: true } } }
-      });
-      authorProfileId = directMessage?.member.profile.id || null;
-      authorUserId = directMessage?.member.profile.userId || null;
-    }
-    const existingReaction = await prisma.reaction.findFirst({
-      where: {
-        profileId: profile.id,
-        messageId,
-        directMessageId
-      }
-    });
-    if (existingReaction) {
-      if (existingReaction.emoji === emoji) {
-        await prisma.reaction.delete({
-          where: { id: existingReaction.id }
-        });
-        events.emit(REACTION_EVENTS.REMOVED, { reaction: existingReaction });
-        return null;
-      }
-      const oldReaction = { ...existingReaction };
-      const updatedReaction = await prisma.reaction.update({
-        where: { id: existingReaction.id },
-        data: { emoji },
-        include: {
-          profile: {
-            select: { id: true, name: true, imageUrl: true }
-          }
-        }
-      });
-      events.emit(REACTION_EVENTS.REMOVED, { reaction: oldReaction });
-      events.emit(REACTION_EVENTS.ADDED, {
-        reaction: updatedReaction,
-        authorProfileId,
-        authorUserId,
-        senderProfileId: profile.id
-      });
-      return updatedReaction;
-    }
-    const reaction = await prisma.reaction.create({
-      data: {
-        emoji,
-        profileId: profile.id,
-        messageId,
-        directMessageId
-      },
-      include: {
-        profile: {
-          select: { id: true, name: true, imageUrl: true }
-        }
-      }
-    });
-    events.emit(REACTION_EVENTS.ADDED, {
-      reaction,
-      authorProfileId,
-      authorUserId,
-      senderProfileId: profile.id
-    });
-    return reaction;
-  }
-  /**
-   * Remove a reaction
-   */
-  static async removeReaction(payload) {
-    const { userId, reactionId } = payload;
-    const profile = await getProfileByUserId(userId);
-    if (!profile) throw new NotFoundError("Profile not found");
-    const reaction = await prisma.reaction.delete({
-      where: {
-        id: reactionId,
-        profileId: profile.id
-      }
-    });
-    events.emit(REACTION_EVENTS.REMOVED, { reaction });
-    return reaction;
-  }
-};
-
-// src/controllers/reaction.ts
-var addReaction = async (req, res) => {
+// src/core/users/controllers.ts
+init_db();
+init_logger();
+var getCurrentUser = async (req, res) => {
   try {
     const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    const { emoji, messageId, directMessageId } = req.body;
-    if (!emoji || !messageId && !directMessageId) {
-      return ApiResponse.error(res, "Missing required fields", 400);
-    }
-    const reaction = await ReactionService.addReaction({
-      userId,
-      emoji,
-      messageId,
-      directMessageId
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true }
     });
-    return ApiResponse.success(res, reaction, "Reaction added");
+    return ApiResponse.success(res, user);
   } catch (error) {
-    logger_default.error("[ADD_REACTION]", error);
-    const status = error.message === "Profile not found" ? 404 : 500;
-    return ApiResponse.error(
-      res,
-      error.message || "Internal server error",
-      status
-    );
-  }
-};
-var removeReaction = async (req, res) => {
-  try {
-    const { reactionId } = req.params;
-    const userId = res.locals.userId;
-    if (!userId) return ApiResponse.error(res, "Unauthorized", 401);
-    await ReactionService.removeReaction({
-      userId,
-      reactionId
-    });
-    return ApiResponse.success(res, { success: true }, "Reaction removed");
-  } catch (error) {
-    logger_default.error("[REMOVE_REACTION]", error);
-    const status = error.message === "Profile not found" ? 404 : 500;
-    return ApiResponse.error(
-      res,
-      error.message || "Internal server error",
-      status
-    );
-  }
-};
-var getMessageReactions = async (req, res) => {
-  try {
-    const { messageId } = req.params;
-    const { type } = req.query;
-    const reactions = await prisma.reaction.findMany({
-      where: type === "direct" ? { directMessageId: messageId } : { messageId },
-      include: {
-        profile: {
-          select: { id: true, name: true, imageUrl: true }
-        }
-      },
-      orderBy: { createdAt: "asc" }
-    });
-    const groupedReactions = reactions.reduce(
-      (acc, reaction) => {
-        if (!acc[reaction.emoji]) {
-          acc[reaction.emoji] = [];
-        }
-        acc[reaction.emoji].push(reaction);
-        return acc;
-      },
-      {}
-    );
-    return ApiResponse.success(res, groupedReactions);
-  } catch (error) {
-    logger_default.error("[GET_MESSAGE_REACTIONS]", error);
+    logger_default.error("[GET_CURRENT_USER]", error);
     return ApiResponse.error(res, "Internal server error");
   }
 };
 
-// src/routes/reactions.ts
-var router6 = Router6();
-router6.get("/message/:messageId", getMessageReactions);
-router6.use(authMiddleware);
-router6.post("/", addReaction);
-router6.delete("/:reactionId", removeReaction);
-router6.get("/message/:messageId", getMessageReactions);
-var reactions_default = router6;
-
-// src/routes/members.ts
-import { Router as Router7 } from "express";
-
-// src/controllers/member.ts
-var getServerMembers = async (req, res) => {
-  try {
-    const { serverId } = req.params;
-    const userId = res.locals.userId;
-    if (!serverId) {
-      return ApiResponse.error(res, "Server ID missing", 400);
-    }
-    const currentMember = await prisma.member.findFirst({
-      where: {
-        serverId,
-        profile: {
-          userId
-        }
-      }
-    });
-    if (!currentMember) {
-      return ApiResponse.error(res, "Forbidden", 403);
-    }
-    const members = await prisma.member.findMany({
-      where: {
-        serverId
-      },
-      include: {
-        profile: true
-      },
-      orderBy: {
-        role: "asc"
-      }
-    });
-    return ApiResponse.success(res, members);
-  } catch (error) {
-    console.error("[GET_SERVER_MEMBERS]", error);
-    return ApiResponse.error(res, "Internal server error");
-  }
-};
-
-// src/routes/members.ts
-var router7 = Router7();
-router7.get("/server/:serverId", getServerMembers);
-var members_default = router7;
-
-// src/routes/channels.ts
-import { Router as Router8 } from "express";
-
-// src/controllers/channel.ts
-var getServerChannels = async (req, res) => {
-  try {
-    const { serverId } = req.params;
-    const userId = res.locals.userId;
-    if (!serverId) {
-      return ApiResponse.error(res, "Server ID missing", 400);
-    }
-    const currentMember = await prisma.member.findFirst({
-      where: {
-        serverId,
-        profile: {
-          userId
-        }
-      }
-    });
-    if (!currentMember) {
-      return ApiResponse.error(res, "Forbidden", 403);
-    }
-    const channels = await prisma.channel.findMany({
-      where: {
-        serverId
-      },
-      orderBy: {
-        createdAt: "asc"
-      }
-    });
-    return ApiResponse.success(res, channels);
-  } catch (error) {
-    console.error("[GET_SERVER_CHANNELS]", error);
-    return ApiResponse.error(res, "Internal server error");
-  }
-};
-
-// src/routes/channels.ts
-var router8 = Router8();
-router8.get("/server/:serverId", getServerChannels);
-var channels_default = router8;
+// src/core/users/routes.ts
+var router4 = Router4();
+router4.get("/users/me", getCurrentUser);
+var routes_default4 = router4;
 
 // src/config/routes.ts
+init_logger();
 function setupRoutes(app2) {
   app2.get("/", (req, res) => {
     res.json({
@@ -1709,18 +2333,21 @@ function setupRoutes(app2) {
   });
   app2.use(authMiddleware);
   app2.use(express.json());
-  app2.use("/api/messages", messages_default);
-  app2.use("/api/conversations", conversations_default);
-  app2.use("/api/link-preview", link_preview_default);
-  app2.use("/api/threads", threads_default);
-  app2.use("/api/notifications", notifications_default);
-  app2.use("/api/reactions", reactions_default);
-  app2.use("/api/members", members_default);
-  app2.use("/api/channels", channels_default);
+  const v1Router = express.Router();
+  v1Router.use(routes_default);
+  v1Router.use(routes_default2);
+  v1Router.use(routes_default3);
+  v1Router.use(routes_default4);
+  app2.use("/api/v1", v1Router);
   app2.use(errorHandler);
 }
 
-// src/services/socket.ts
+// src/socket/index.ts
+init_logger();
+import { Server } from "socket.io";
+
+// src/shared/core/socket.ts
+init_logger();
 var SocketService = class {
   io = null;
   /**
@@ -1760,50 +2387,198 @@ var SocketService = class {
 };
 var socketService = new SocketService();
 
-// src/services/notification.ts
+// src/socket/auth.ts
+init_logger();
+import { fromNodeHeaders as fromNodeHeaders2 } from "better-auth/node";
+var socketAuthMiddleware = async (socket, next) => {
+  logger_default.info("[Socket.io] New connection attempt");
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders2(socket.handshake.headers)
+  });
+  if (!session) {
+    logger_default.warn("[Socket.io] Unauthenticated connection attempt rejected");
+    return next(new Error("Authentication failed"));
+  }
+  socket.user = {
+    id: session.user.id,
+    name: session.user.name,
+    imageUrl: session.user.image || "",
+    email: session.user.email
+  };
+  logger_default.info(`[Socket.io] User authenticated: ${socket.user.id}`);
+  next();
+};
+
+// src/socket/messages.ts
+init_db();
+init_logger();
+init_services3();
+var registerMessageHandlers = (io2, socket) => {
+  socket.on("private message", async ({ content, to }) => {
+    io2.to(to).to(socket.user.id).emit("private message", {
+      ...content,
+      from: socket.user,
+      to
+    });
+    logger_default.info(`[Socket] Private message from ${socket.user.id} to ${to}`);
+    try {
+      const conversation = await findOrCreateConversation(socket.user.id, to);
+      if (!conversation) return;
+      const member = conversation.memberOne.profileId === socket.user.id ? conversation.memberOne : conversation.memberTwo;
+      await prisma.directMessage.create({
+        data: {
+          content: content.content || content,
+          conversationId: conversation.id,
+          memberId: member.id
+        }
+      });
+    } catch (err) {
+      logger_default.error("[Socket] Error saving private message:", err);
+    }
+  });
+  socket.on("markAsRead", async ({ senderId }) => {
+    try {
+      const receiverId = socket.user.id;
+      await prisma.directMessage.updateMany({
+        where: {
+          member: {
+            profileId: senderId
+          },
+          conversation: {
+            OR: [
+              { memberOneId: receiverId, memberTwoId: senderId },
+              { memberOneId: senderId, memberTwoId: receiverId }
+            ]
+          },
+          seen: false
+        },
+        data: {
+          seen: true
+        }
+      });
+      io2.to(senderId).emit("markAsRead", { senderId, receiverId });
+    } catch (error) {
+      logger_default.error("[Socket] Error marking messages as read:", error);
+    }
+  });
+};
+
+// src/socket/presence.ts
+init_db();
+init_logger();
+var registerPresenceHandlers = (io2, socket) => {
+  prisma.user.update({
+    where: { id: socket.user.id },
+    data: { isOnline: true }
+  }).catch(
+    (err) => logger_default.error(
+      `[Socket] Error updating online status for ${socket.user.id}:`,
+      err
+    )
+  );
+  const activeUsers = [];
+  for (let [id, socket2] of io2.of("/").sockets) {
+    activeUsers.push({
+      socketId: id,
+      ...socket2.handshake.auth
+    });
+  }
+  socket.emit("active-users", activeUsers);
+  socket.broadcast.emit("user connected", {
+    socketId: socket.id,
+    userData: { ...socket.handshake.auth }
+  });
+  socket.emit("session", {
+    user: socket.user
+  });
+  socket.on("typing", (to) => {
+    socket.broadcast.to(to).emit("broadcast typing", {});
+  });
+  socket.on("disconnect", async () => {
+    logger_default.info(`[Socket] Client disconnected: ${socket.id}`);
+    const userId = socket.user.id;
+    const matchingSockets = await io2.in(userId).fetchSockets();
+    const isStillConnected = matchingSockets.length > 0;
+    if (!isStillConnected) {
+      logger_default.info(
+        `[Socket] Last connection for user ${userId} closed. Marking offline.`
+      );
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          isOnline: false,
+          lastSeenAt: /* @__PURE__ */ new Date()
+        }
+      }).catch(
+        (err) => logger_default.error(
+          `[Socket] Error updating offline status for ${userId}:`,
+          err
+        )
+      );
+      socket.broadcast.emit("user disconnected", userId);
+    }
+  });
+};
+
+// src/socket/notifications.ts
+var registerNotificationHandlers = (io2, socket) => {
+  socket.on("notification", (arg) => {
+    socket.broadcast.to(arg.to).emit("notification", arg.notification);
+  });
+};
+
+// src/socket/rooms.ts
+init_logger();
+var registerRoomHandlers = (io2, socket) => {
+  socket.on("join-room", (room) => {
+    socket.join(room);
+    logger_default.info(`[Socket] User ${socket.user.id} joined room ${room}`);
+  });
+  socket.on("leave-room", (room) => {
+    socket.leave(room);
+    logger_default.info(`[Socket] User ${socket.user.id} left room ${room}`);
+  });
+};
+
+// src/core/messaging/events.ts
+init_events();
+
+// src/core/notifications/services.ts
+init_db();
 var NotificationService = class {
   /**
-   * Create a notification and emit it via socket
+   * Create a new notification
    */
   static async createNotification(payload) {
-    try {
-      const {
+    const {
+      type,
+      content,
+      senderId,
+      receiverId,
+      messageId,
+      channelId,
+      serverId
+    } = payload;
+    const notification = await prisma.notification.create({
+      data: {
+        type,
+        content,
         senderId,
         receiverId,
         messageId,
         channelId,
-        serverId,
-        conversationId,
-        emoji,
-        ...rest
-      } = payload;
-      const notification = await prisma.notification.create({
-        data: {
-          ...rest,
-          sender: { connect: { id: senderId } },
-          receiver: { connect: { id: receiverId } },
-          messageId,
-          channelId,
-          serverId,
-          conversationId,
-          emoji
-        }
-      });
-      const receiverProfile = await prisma.profile.findUnique({
-        where: { id: receiverId }
-      });
-      if (receiverProfile) {
-        socketService.emitNotification(receiverProfile.userId, notification);
+        serverId
+      },
+      include: {
+        sender: true
       }
-      return notification;
-    } catch (error) {
-      logger_default.error("[NotificationService] Error creating notification", error);
-      throw error;
-    }
+    });
+    socketService.emitNotification(receiverId, notification);
+    return notification;
   }
 };
 
-// src/utils/mention-parser.ts
+// src/shared/utils/mention-parser.ts
 function parseMentions(content) {
   const mentions = [];
   const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
@@ -1824,7 +2599,9 @@ function extractMentionedUserIds(content) {
   return uniqueIds;
 }
 
-// src/events/message.handler.ts
+// src/core/messaging/events.ts
+init_db();
+init_logger();
 events.on(MESSAGE_EVENTS.CREATED, async ({ message, type, contextId }) => {
   try {
     socketService.emitChatMessage(contextId, "messages", message);
@@ -1880,9 +2657,7 @@ events.on(REACTION_EVENTS.REMOVED, async ({ reaction }) => {
   socketService.emit("reaction:removed", { id: reaction.id }, roomId);
 });
 
-// src/libs/socket.ts
-import { Server } from "socket.io";
-import { fromNodeHeaders as fromNodeHeaders2 } from "better-auth/node";
+// src/socket/index.ts
 var io;
 var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
   io = new Server(httpServer2, {
@@ -1896,149 +2671,25 @@ var initializeSocket = (httpServer2, allowedOrigins2, app2) => {
   });
   socketService.initialize(io);
   app2.set("io", io);
-  io.use(async (socket, next) => {
-    logger_default.info("[Socket.io] New connection attempt");
-    const session = await auth.api.getSession({
-      headers: fromNodeHeaders2(socket.handshake.headers)
-    });
-    if (!session) {
-      logger_default.warn("[Socket.io] Unauthenticated connection attempt rejected");
-      return next(new Error("Authentication failed"));
-    }
-    socket.user = {
-      id: session.user.id,
-      name: session.user.name,
-      imageUrl: session.user.image || "",
-      email: session.user.email
-    };
-    logger_default.info(`[Socket.io] User authenticated: ${socket.user.id}`);
-    next();
-  });
+  io.use(socketAuthMiddleware);
   io.on("connection", (socket) => {
     logger_default.info(`[Socket.io] Client connected: ${socket.id}`);
     socket.join(socket.user?.id);
-    prisma.user.update({
-      where: { id: socket.user.id },
-      data: { isOnline: true }
-    }).catch(
-      (err) => logger_default.error(
-        `[Socket.io] Error updating online status for ${socket.user.id}:`,
-        err
-      )
-    );
-    socket.onAny((event, ...args) => {
-      logger_default.info(event, args);
-    });
-    const activeUsers = [];
-    for (let [id, socket2] of io.of("/").sockets) {
-      activeUsers.push({
-        socketId: id,
-        ...socket2.handshake.auth
+    if (process.env.NODE_ENV !== "production") {
+      socket.onAny((event, ...args) => {
+        logger_default.info(`[Socket Event] ${event}`, args);
       });
     }
-    socket.emit("active-users", activeUsers);
-    socket.broadcast.emit("user connected", {
-      socketId: socket.id,
-      userData: { ...socket.handshake.auth }
-    });
-    socket.emit("session", {
-      user: socket.user
-    });
-    socket.on("private message", async ({ content, to }) => {
-      io.to(to).to(socket.user.id).emit("private message", {
-        ...content,
-        from: socket.user,
-        to
-      });
-      logger_default.info(socket.user.id);
-      try {
-        const conversation = await findOrCreateConversation(socket.user.id, to);
-        if (!conversation) return;
-        const member = conversation.memberOne.profileId === socket.user.id ? conversation.memberOne : conversation.memberTwo;
-        await prisma.directMessage.create({
-          data: {
-            content: content.content || content,
-            // Handle both object and string
-            conversationId: conversation.id,
-            memberId: member.id
-          }
-        });
-      } catch (err) {
-        logger_default.error(err);
-      }
-    });
-    socket.on("markAsRead", async ({ senderId }) => {
-      try {
-        const receiverId = socket.user.id;
-        await prisma.directMessage.updateMany({
-          where: {
-            member: {
-              profileId: senderId
-            },
-            conversation: {
-              OR: [
-                { memberOneId: receiverId, memberTwoId: senderId },
-                { memberOneId: senderId, memberTwoId: receiverId }
-              ]
-            },
-            seen: false
-          },
-          data: {
-            seen: true
-          }
-        });
-        io.to(senderId).emit("markAsRead", { senderId, receiverId });
-      } catch (error) {
-        logger_default.error("\u274C Error marking messages as read:", error);
-      }
-    });
-    socket.on("typing", (to) => {
-      socket.broadcast.to(to).emit("broadcast typing", {});
-    });
-    const notifications = [];
-    socket.on("notification", (arg) => {
-      socket.broadcast.to(arg.to).emit("notification", arg.notification);
-    });
-    socket.on("notification-acknowledgment", (notificationId) => {
-    });
-    socket.on("join-room", (room) => {
-      socket.join(room);
-      logger_default.info(`[Socket.io] User ${socket.user.id} joined room ${room}`);
-    });
-    socket.on("leave-room", (room) => {
-      socket.leave(room);
-      logger_default.info(`[Socket.io] User ${socket.user.id} left room ${room}`);
-    });
-    socket.on("disconnect", async () => {
-      logger_default.info(`[Socket.io] Client disconnected: ${socket.id}`);
-      const userId = socket.user.id;
-      const matchingSockets = await io.in(userId).fetchSockets();
-      const isStillConnected = matchingSockets.length > 0;
-      if (!isStillConnected) {
-        logger_default.info(
-          `[Socket.io] Last connection for user ${userId} closed. Marking offline.`
-        );
-        try {
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              isOnline: false,
-              lastSeenAt: /* @__PURE__ */ new Date()
-            }
-          });
-          socket.broadcast.emit("user disconnected", userId);
-        } catch (err) {
-          logger_default.error(
-            `[Socket.io] Error updating offline status for ${userId}:`,
-            err
-          );
-        }
-      }
-    });
+    registerMessageHandlers(io, socket);
+    registerPresenceHandlers(io, socket);
+    registerNotificationHandlers(io, socket);
+    registerRoomHandlers(io, socket);
   });
+  return io;
 };
 
 // src/config/app.ts
+init_logger();
 import express2 from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -2076,6 +2727,8 @@ function createApp() {
 }
 
 // src/config/shutdown.ts
+init_db();
+init_logger();
 function serverShutdown(httpServer2) {
   const shutdown = async (signal) => {
     logger_default.info(`

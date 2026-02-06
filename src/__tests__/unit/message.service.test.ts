@@ -1,9 +1,9 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { MessageService } from "@/services/message";
-import { prisma } from "@/core/db";
-import { MemberService } from "@/services/member";
-import { events } from "@/core/events";
-import { NotFoundError } from "@/utils/errors";
+import { MessageService } from "@/core/messaging/services";
+import { prisma } from "@/shared/core/db";
+import { MemberService } from "@/core/servers/services";
+import { events } from "@/shared/core/events";
+import { NotFoundError } from "@/shared/utils/errors";
 
 const MOCK_USER_ID = "507f1f77bcf86cd799439011";
 const MOCK_MEMBER_ID = "507f191e810c19729de860ea";
@@ -11,7 +11,7 @@ const MOCK_MESSAGE_ID = "60b8d2931234567890abcdef";
 const MOCK_SERVER_ID = "60b8d2931234567890fedcba";
 const MOCK_CHANNEL_ID = "60b8d2931234567890123456";
 
-vi.mock("@/core/db", () => ({
+vi.mock("@/shared/core/db", () => ({
   prisma: {
     message: {
       create: vi.fn(),
@@ -29,9 +29,9 @@ vi.mock("@/core/db", () => ({
   },
 }));
 
-vi.mock("@/services/member");
+vi.mock("@/domains/servers/services");
 
-vi.mock("@/core/events", () => ({
+vi.mock("@/shared/core/events", () => ({
   events: {
     emit: vi.fn(),
   },

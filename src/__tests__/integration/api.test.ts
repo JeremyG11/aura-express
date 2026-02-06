@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "@/server";
-import { prisma } from "@/core/db";
+import { prisma } from "@/shared/core/db";
 import { setupTestEnv, teardownTestEnv } from "@/__tests__/test-utils";
 
 describe("API Endpoints", () => {

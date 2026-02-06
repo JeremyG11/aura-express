@@ -1,0 +1,13 @@
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: aura-mongo-db
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27022:27017"
+
+volumes:
+  mongo-data:

@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 import http from "http";
-import logger from "@/core/logger";
+import logger from "@/shared/core/logger";
 import { setupRoutes } from "@/config/routes";
-import { initializeSocket } from "@/libs/socket";
+import { initializeSocket } from "@/socket";
 import { createApp, allowedOrigins } from "@/config/app";
 import { serverShutdown } from "@/config/shutdown";
 

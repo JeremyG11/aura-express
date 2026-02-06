@@ -29,6 +29,7 @@ model Profile {
   notificationsSent     Notification[] @relation("NotificationSender")
   notificationsReceived Notification[] @relation("NotificationReceiver")
   reactions             Reaction[]
+  pollVotes             PollVote[]
 }
 
 enum UserRole {
@@ -201,12 +202,17 @@ model Message {
   seen Boolean @default(false)
   isEncrypted Boolean @default(false)
 
+  isPinned Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  poll Poll?
 
   @@index([channelId])
   @@index([memberId])
   @@index([parentId])
+  @@index([channelId, createdAt])
 }
 
 model Conversation {
@@ -243,12 +249,18 @@ model DirectMessage {
   deleted Boolean @default(false)
   seen Boolean @default(false)
 
+  isPinned Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  poll Poll?
 
   @@index([memberId])
   @@index([conversationId])
   @@index([parentId])
+  @@index([conversationId, createdAt])
+  @@index([memberId, seen])
 
   isEncrypted Boolean @default(false)
 }
@@ -324,4 +336,47 @@ model Reaction {
   @@index([profileId])
   @@unique([profileId, messageId, emoji])
   @@unique([profileId, directMessageId, emoji])
+}
+
+model Poll {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  question  String
+  expiresAt DateTime?
+
+  messageId       String? @unique @db.ObjectId
+  message         Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  directMessageId String? @unique @db.ObjectId
+  directMessage   DirectMessage? @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+
+  options   PollOption[]
+  votes     PollVote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PollOption {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  text    String
+  
+  pollId  String @db.ObjectId
+  poll    Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  
+  votes   PollVote[]
+}
+
+model PollVote {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  
+  profileId String @db.ObjectId
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  pollId    String @db.ObjectId
+  poll      Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  
+  optionId  String @db.ObjectId
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, pollId])
 }
